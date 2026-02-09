@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Call</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <style>
         /* Reset & Base */
         * {
@@ -16,12 +16,13 @@
         }
 
         body {
-            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: #000;
             color: #fff;
             height: 100vh;
             overflow: hidden;
             position: relative;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* App Container */
@@ -33,7 +34,7 @@
             bottom: 0;
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
+            background: #000;
         }
 
         .screen {
@@ -47,93 +48,113 @@
             display: flex;
         }
 
-        /* Header */
-        .header {
-            padding: 15px 20px;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            position: relative;
-            z-index: 10;
-        }
-
-        .header h1 {
-            font-size: 20px;
-            font-weight: 500;
-        }
-
-        .back-btn {
-            background: none;
-            border: none;
-            color: #fff;
-            font-size: 24px;
-            padding: 5px;
-            cursor: pointer;
-        }
-
         /* Home Screen */
         .home-screen {
             padding: 40px 20px;
             align-items: center;
             justify-content: center;
+            gap: 40px;
         }
 
-        .call-btn {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-            border: none;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 40px;
-            box-shadow: 0 10px 30px rgba(0, 210, 255, 0.3);
-            transition: transform 0.2s;
+        .logo {
+            text-align: center;
         }
 
-        .call-btn:active {
-            transform: scale(0.95);
-        }
-
-        .call-btn i {
-            font-size: 40px;
+        .logo h1 {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
             margin-bottom: 10px;
         }
 
-        .call-input {
+        .logo p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 16px;
+        }
+
+        .call-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
             width: 100%;
             max-width: 300px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 25px;
-            padding: 15px 20px;
+        }
+
+        .create-btn {
+            width: 100%;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 15px;
             color: white;
             font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.2s;
+        }
+
+        .create-btn:active {
+            transform: scale(0.98);
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .join-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .join-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 15px 20px;
+            color: white;
+            font-size: 16px;
             text-align: center;
-            margin-bottom: 20px;
             outline: none;
         }
 
-        .call-input::placeholder {
+        .join-input::placeholder {
             color: rgba(255, 255, 255, 0.5);
         }
 
         .join-btn {
             width: 100%;
-            max-width: 300px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            height: 50px;
+            background: rgba(255, 255, 255, 0.1);
             border: none;
-            border-radius: 25px;
-            padding: 15px;
+            border-radius: 15px;
             color: white;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 500;
             cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .join-btn:active {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         /* Call Screen */
@@ -142,88 +163,29 @@
             position: relative;
         }
 
-        .participants-view {
-            flex: 1;
-            padding: 20px;
+        .header {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .room-info {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-        }
-
-        .participant-card {
-            width: 100%;
-            max-width: 400px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .participant-card.speaking {
-            background: rgba(0, 210, 255, 0.1);
-            border: 2px solid #00d2ff;
-            transform: scale(1.02);
-        }
-
-        .participant-card.owner {
-            background: rgba(86, 98, 246, 0.1);
-            border: 2px solid #5662f6;
-        }
-
-        .participant-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: 500;
-            flex-shrink: 0;
-        }
-
-        .participant-info {
-            flex: 1;
-        }
-
-        .participant-name {
-            font-size: 18px;
-            font-weight: 500;
-            margin-bottom: 5px;
-        }
-
-        .participant-status {
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.6);
-            display: flex;
-            align-items: center;
             gap: 5px;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #4ade80;
+        .room-code-display {
+            font-size: 24px;
+            font-weight: 600;
+            font-family: 'Monaco', 'Courier New', monospace;
+            letter-spacing: 3px;
         }
 
-        .status-dot.speaking {
-            background: #00d2ff;
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .participant-actions {
+        .room-actions {
             display: flex;
             gap: 10px;
         }
@@ -239,28 +201,123 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 18px;
             transition: background 0.2s;
         }
 
-        .action-btn:hover {
+        .action-btn:active {
             background: rgba(255, 255, 255, 0.2);
         }
 
-        .action-btn.kick {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
+        .action-btn.share {
+            background: #667eea;
         }
 
-        .action-btn.mute {
-            background: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
+        /* Participants */
+        .participants-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .participant-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .participant-card.speaking {
+            background: rgba(102, 126, 234, 0.15);
+            border-color: #667eea;
+        }
+
+        .participant-card.me {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .participant-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .participant-info {
+            flex: 1;
+        }
+
+        .participant-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 3px;
+        }
+
+        .participant-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+
+        .status-indicator.speaking {
+            background: #667eea;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .participant-badge {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .kick-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .kick-btn:active {
+            background: rgba(239, 68, 68, 0.3);
         }
 
         /* Call Controls */
         .call-controls {
             padding: 30px 20px;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(20px);
+            background: rgba(0, 0, 0, 0.9);
             display: flex;
             justify-content: center;
             gap: 20px;
@@ -293,38 +350,10 @@
             background: #ef4444;
         }
 
-        .speaker-btn {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .speaker-btn.active {
-            background: #3a7bd5;
-        }
-
         .end-call-btn {
             background: #ef4444;
             width: 70px;
             height: 70px;
-        }
-
-        /* Room Info */
-        .room-info {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.8);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .room-code {
-            font-weight: 500;
-            color: white;
         }
 
         /* Toast */
@@ -332,15 +361,17 @@
             position: fixed;
             bottom: 100px;
             left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: rgba(0, 0, 0, 0.8);
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(0, 0, 0, 0.9);
             backdrop-filter: blur(20px);
             padding: 15px 25px;
-            border-radius: 25px;
+            border-radius: 15px;
             font-size: 14px;
             opacity: 0;
             transition: all 0.3s ease;
             z-index: 1000;
+            max-width: 90%;
+            text-align: center;
         }
 
         .toast.show {
@@ -360,13 +391,15 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            flex-direction: column;
+            gap: 20px;
         }
 
         .spinner {
             width: 50px;
             height: 50px;
             border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #00d2ff;
+            border-top-color: #667eea;
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -377,31 +410,53 @@
 
         /* Mobile Optimizations */
         @media (max-width: 768px) {
-            .call-btn {
-                width: 120px;
-                height: 120px;
+            .home-screen {
+                padding: 30px 20px;
+            }
+
+            .logo h1 {
+                font-size: 36px;
+            }
+
+            .create-btn, .join-btn {
+                height: 55px;
+            }
+
+            .room-code-display {
+                font-size: 20px;
             }
 
             .control-btn {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
+                width: 55px;
+                height: 55px;
+                font-size: 22px;
             }
 
             .end-call-btn {
                 width: 60px;
                 height: 60px;
             }
+        }
 
-            .participant-card {
-                padding: 15px;
+        /* Speaker Button - только на мобильных */
+        @media (max-width: 768px) {
+            .speaker-btn {
+                display: block;
             }
+        }
 
-            .participant-avatar {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
+        @media (min-width: 769px) {
+            .speaker-btn {
+                display: none;
             }
+        }
+
+        .speaker-btn {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .speaker-btn.active {
+            background: #667eea;
         }
 
         /* Safe areas for iPhone */
@@ -414,6 +469,55 @@
             .call-controls {
                 padding-bottom: max(30px, env(safe-area-inset-bottom));
             }
+            
+            .home-screen {
+                padding-top: max(40px, env(safe-area-inset-top));
+                padding-bottom: max(40px, env(safe-area-inset-bottom));
+            }
+        }
+
+        /* Scrollbar */
+        .participants-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .participants-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .participants-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .connection-dot.connected {
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        .connection-dot.disconnected {
+            background: #ef4444;
         }
     </style>
 </head>
@@ -421,6 +525,13 @@
     <!-- Loading Screen -->
     <div class="loading" id="loading">
         <div class="spinner"></div>
+        <div id="loadingText">Подключение...</div>
+    </div>
+
+    <!-- Connection Status -->
+    <div class="connection-status" id="connectionStatus" style="display: none;">
+        <div class="connection-dot disconnected"></div>
+        <span>Отключен</span>
     </div>
 
     <!-- Toast -->
@@ -430,44 +541,58 @@
     <div class="app" id="app">
         <!-- Home Screen -->
         <div class="screen home-screen active" id="homeScreen">
-            <div style="text-align: center; margin-bottom: 40px;">
-                <h1 style="font-size: 32px; margin-bottom: 10px;">Call</h1>
-                <p style="color: rgba(255, 255, 255, 0.6);">Бесплатные голосовые звонки</p>
+            <div class="logo">
+                <h1>Call</h1>
+                <p>Бесплатные звонки в браузере</p>
             </div>
 
-            <button class="call-btn" onclick="createRoom()">
-                <i class="fas fa-phone-alt"></i>
-                <span>Создать звонок</span>
-            </button>
+            <div class="call-actions">
+                <button class="create-btn" onclick="createRoom()">
+                    <i class="fas fa-plus"></i>
+                    Создать звонок
+                </button>
 
-            <input type="text" class="call-input" id="roomCode" placeholder="Код звонка" maxlength="6">
-            <button class="join-btn" onclick="joinRoom()">
-                Присоединиться
-            </button>
+                <div class="divider">
+                    или
+                </div>
 
-            <div style="margin-top: 30px; color: rgba(255, 255, 255, 0.4); font-size: 12px;">
-                Без регистрации • Без ограничений
+                <div class="join-section">
+                    <input type="text" class="join-input" id="roomCode" 
+                           placeholder="Введите код звонка" maxlength="6" 
+                           onkeypress="if(event.key=='Enter') joinRoom()">
+                    <button class="join-btn" onclick="joinRoom()">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Присоединиться
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; color: rgba(255, 255, 255, 0.4); font-size: 12px; text-align: center;">
+                <p>Без регистрации • End-to-end шифрование • Работает в браузере</p>
             </div>
         </div>
 
         <!-- Call Screen -->
         <div class="screen call-screen" id="callScreen">
             <div class="header">
-                <div class="flex-between">
-                    <button class="back-btn" onclick="leaveRoom()">
-                        <i class="fas fa-chevron-left"></i>
+                <div class="room-info">
+                    <div style="font-size: 14px; color: rgba(255, 255, 255, 0.6);">
+                        <i class="fas fa-hashtag"></i> Код звонка
+                    </div>
+                    <div class="room-code-display" id="currentRoomCode">------</div>
+                </div>
+                
+                <div class="room-actions">
+                    <button class="action-btn share" id="shareBtn" onclick="shareRoomCode()">
+                        <i class="fas fa-share-alt"></i>
                     </button>
-                    <h1>Звонок</h1>
-                    <div style="width: 40px;"></div>
+                    <button class="action-btn" onclick="copyRoomCode()">
+                        <i class="fas fa-copy"></i>
+                    </button>
                 </div>
             </div>
 
-            <div class="room-info">
-                <i class="fas fa-hashtag"></i>
-                <span class="room-code" id="currentRoomCode">------</span>
-            </div>
-
-            <div class="participants-view" id="participantsView">
+            <div class="participants-container" id="participantsView">
                 <!-- Participants will be added here -->
             </div>
 
@@ -475,9 +600,12 @@
                 <button class="control-btn mute-btn" id="muteBtn" onclick="toggleMic()">
                     <i class="fas fa-microphone"></i>
                 </button>
+                
+                <!-- Кнопка динамика только на мобильных -->
                 <button class="control-btn speaker-btn" id="speakerBtn" onclick="toggleSpeaker()">
                     <i class="fas fa-volume-up"></i>
                 </button>
+                
                 <button class="control-btn end-call-btn" onclick="leaveRoom()">
                     <i class="fas fa-phone"></i>
                 </button>
@@ -485,6 +613,7 @@
         </div>
     </div>
 
+    <!-- Audio Elements -->
     <audio id="remoteAudio" autoplay></audio>
 
     <script>
@@ -497,7 +626,6 @@
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
                 { 
                     urls: 'turn:openrelay.metered.ca:80',
                     username: 'openrelayproject',
@@ -506,8 +634,8 @@
             ]
         };
 
-        // Состояние
-        let state = {
+        // Состояние приложения
+        const state = {
             userId: null,
             userName: null,
             roomId: null,
@@ -518,7 +646,9 @@
             isMuted: true,
             isSpeaker: false,
             signalInterval: null,
-            updateInterval: null
+            updateInterval: null,
+            activeSpeaker: null,
+            participants: []
         };
 
         // Инициализация
@@ -531,24 +661,65 @@
             
             // Проверка поддержки
             if (!checkSupport()) {
-                showToast('Ваш браузер не поддерживает звонки');
+                showToast('Ваш браузер не поддерживает звонки', 5000);
+                document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
                 return;
             }
 
+            // Проверка подключения
+            await checkConnection();
+            
             // Скрываем загрузку
             setTimeout(() => {
                 document.getElementById('loading').style.display = 'none';
-            }, 500);
+            }, 1000);
         }
 
         function generateName() {
-            const first = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел'];
-            const last = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов'];
-            return `${first[Math.floor(Math.random() * first.length)]} ${last[Math.floor(Math.random() * last.length)]}`;
+            const names = [
+                'Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 
+                'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария', 
+                'Екатерина', 'Ольга', 'Татьяна', 'Наталья'
+            ];
+            const surnames = [
+                'Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов',
+                'Попов', 'Лебедев', 'Козлов', 'Новиков', 'Морозов'
+            ];
+            
+            const name = names[Math.floor(Math.random() * names.length)];
+            const surname = surnames[Math.floor(Math.random() * surnames.length)];
+            
+            return `${name} ${surname}`;
         }
 
         function checkSupport() {
             return 'RTCPeerConnection' in window && 'getUserMedia' in navigator.mediaDevices;
+        }
+
+        async function checkConnection() {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'ping' })
+                });
+                
+                updateConnectionStatus(response.ok);
+                return response.ok;
+            } catch (error) {
+                updateConnectionStatus(false);
+                return false;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connectionStatus');
+            const dot = status.querySelector('.connection-dot');
+            const text = status.querySelector('span');
+            
+            status.style.display = 'flex';
+            dot.className = connected ? 'connection-dot connected' : 'connection-dot disconnected';
+            text.textContent = connected ? 'Подключено' : 'Отключено';
         }
 
         // Навигация
@@ -570,7 +741,7 @@
 
         // Создание комнаты
         async function createRoom() {
-            showLoading();
+            showLoading('Создание звонка...');
             
             try {
                 const response = await fetch(API_URL, {
@@ -588,13 +759,14 @@
                 if (data.success) {
                     state.roomId = data.roomId;
                     state.roomOwner = true;
-                    startCall();
+                    await startCall();
+                    showToast('Звонок создан! Код скопирован');
                 } else {
-                    throw new Error(data.error || 'Ошибка');
+                    throw new Error(data.error || 'Ошибка создания');
                 }
             } catch (error) {
                 showToast('Ошибка создания звонка');
-                console.error(error);
+                console.error('Create room error:', error);
             } finally {
                 hideLoading();
             }
@@ -605,11 +777,11 @@
             const code = document.getElementById('roomCode').value.trim().toUpperCase();
             
             if (!code || code.length !== 6) {
-                showToast('Введите 6-значный код');
+                showToast('Введите 6-значный код звонка');
                 return;
             }
 
-            showLoading();
+            showLoading('Присоединение...');
             
             try {
                 const response = await fetch(API_URL, {
@@ -628,13 +800,14 @@
                 if (data.success) {
                     state.roomId = code;
                     state.roomOwner = false;
-                    startCall();
+                    await startCall();
+                    showToast('Присоединились к звонку');
                 } else {
                     throw new Error(data.error || 'Комната не найдена');
                 }
             } catch (error) {
                 showToast('Ошибка присоединения');
-                console.error(error);
+                console.error('Join room error:', error);
             } finally {
                 hideLoading();
             }
@@ -650,17 +823,34 @@
                 showScreen('callScreen');
                 document.getElementById('currentRoomCode').textContent = state.roomId;
                 
-                // Запускаем обновления
-                startUpdates();
+                // Обновляем UI кнопок
+                updateShareButton();
                 
                 // Авто-копирование кода при создании
                 if (state.roomOwner) {
                     setTimeout(() => copyRoomCode(), 500);
                 }
                 
+                // Запускаем обновления
+                startUpdates();
+                
+                // Обновляем список участников
+                await updateParticipants();
+                
             } catch (error) {
                 showToast('Ошибка доступа к микрофону');
-                console.error(error);
+                console.error('Start call error:', error);
+                showScreen('homeScreen');
+            }
+        }
+
+        function updateShareButton() {
+            const shareBtn = document.getElementById('shareBtn');
+            if (navigator.share) {
+                shareBtn.style.display = 'flex';
+                shareBtn.title = 'Поделиться кодом';
+            } else {
+                shareBtn.style.display = 'none';
             }
         }
 
@@ -671,11 +861,12 @@
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
-                        autoGainControl: true
+                        autoGainControl: true,
+                        channelCount: 2
                     }
                 });
                 
-                // Включаем микрофон
+                // Включаем микрофон по умолчанию
                 toggleMic();
                 
             } catch (error) {
@@ -698,10 +889,12 @@
                 '<i class="fas fa-microphone-slash"></i>' : 
                 '<i class="fas fa-microphone"></i>';
             
-            showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен');
+            btn.title = state.isMuted ? 'Включить микрофон' : 'Выключить микрофон';
+            
+            showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
         }
 
-        // Управление динамиком
+        // Управление динамиком (только мобильные)
         function toggleSpeaker() {
             state.isSpeaker = !state.isSpeaker;
             
@@ -715,11 +908,13 @@
                 });
             }
             
-            showToast(state.isSpeaker ? 'Основной динамик' : 'Стандартный режим');
+            showToast(state.isSpeaker ? 'Основной динамик' : 'Стандартный', 1500);
         }
 
         // Копирование кода комнаты
         async function copyRoomCode() {
+            if (!state.roomId) return;
+            
             try {
                 await navigator.clipboard.writeText(state.roomId);
                 showToast('Код скопирован');
@@ -735,6 +930,27 @@
             }
         }
 
+        // Поделиться кодом (только мобильные)
+        async function shareRoomCode() {
+            if (!state.roomId) return;
+            
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Присоединиться к звонку',
+                        text: `Код звонка: ${state.roomId}`,
+                        url: window.location.href
+                    });
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        copyRoomCode();
+                    }
+                }
+            } else {
+                copyRoomCode();
+            }
+        }
+
         // Запуск обновлений
         function startUpdates() {
             // Обновление списка участников каждые 3 секунды
@@ -743,8 +959,8 @@
             // Получение сигналов WebRTC
             state.signalInterval = setInterval(pollSignals, 2000);
             
-            // Первое обновление
-            updateParticipants();
+            // Проверка подключения каждые 30 секунд
+            setInterval(checkConnection, 30000);
         }
 
         // Обновление списка участников
@@ -764,19 +980,48 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    renderParticipants(data.participants || []);
+                    if (data.success) {
+                        state.participants = data.participants || [];
+                        renderParticipants();
+                        
+                        // Авто-подключение к новым участникам
+                        connectToNewParticipants();
+                    }
                 }
             } catch (error) {
-                console.error('Update error:', error);
+                console.error('Update participants error:', error);
             }
         }
 
+        // Подключение к новым участникам
+        function connectToNewParticipants() {
+            state.participants.forEach(p => {
+                if (p.id !== state.userId && !state.peerConnections[p.id]) {
+                    connectToPeer(p.id);
+                }
+            });
+        }
+
         // Отрисовка участников
-        function renderParticipants(participants) {
+        function renderParticipants() {
             const container = document.getElementById('participantsView');
             container.innerHTML = '';
             
-            participants.forEach(p => {
+            // Сортируем: сначала создатель, потом говорящие, потом остальные
+            const sortedParticipants = [...state.participants].sort((a, b) => {
+                if (a.isOwner && !b.isOwner) return -1;
+                if (!a.isOwner && b.isOwner) return 1;
+                
+                const aSpeaking = state.audioAnalyzers[a.id]?.speaking || false;
+                const bSpeaking = state.audioAnalyzers[b.id]?.speaking || false;
+                
+                if (aSpeaking && !bSpeaking) return -1;
+                if (!aSpeaking && bSpeaking) return 1;
+                
+                return 0;
+            });
+            
+            sortedParticipants.forEach(p => {
                 const card = createParticipantCard(p);
                 container.appendChild(card);
             });
@@ -788,7 +1033,7 @@
             const isSpeaking = state.audioAnalyzers[participant.id]?.speaking || false;
             
             const card = document.createElement('div');
-            card.className = `participant-card ${isSpeaking ? 'speaking' : ''} ${isOwner ? 'owner' : ''}`;
+            card.className = `participant-card ${isSpeaking ? 'speaking' : ''} ${isMe ? 'me' : ''}`;
             
             // Аватар
             const initials = getInitials(participant.name || participant.id);
@@ -802,22 +1047,17 @@
                     <div class="participant-name">
                         ${participant.name || participant.id}
                         ${isMe ? ' (Вы)' : ''}
-                        ${isOwner ? ' 👑' : ''}
                     </div>
                     <div class="participant-status">
-                        <div class="status-dot ${isSpeaking ? 'speaking' : ''}"></div>
+                        <div class="status-indicator ${isSpeaking ? 'speaking' : ''}"></div>
                         ${isSpeaking ? 'Говорит' : 'В сети'}
+                        ${isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
                     </div>
                 </div>
                 ${state.roomOwner && !isMe ? `
-                    <div class="participant-actions">
-                        <button class="action-btn mute" onclick="muteParticipant('${participant.id}')">
-                            <i class="fas fa-volume-mute"></i>
-                        </button>
-                        <button class="action-btn kick" onclick="kickParticipant('${participant.id}')">
-                            <i class="fas fa-user-slash"></i>
-                        </button>
-                    </div>
+                    <button class="kick-btn" onclick="kickParticipant('${participant.id}')">
+                        <i class="fas fa-user-slash"></i>
+                    </button>
                 ` : ''}
             `;
             
@@ -825,13 +1065,17 @@
         }
 
         function getInitials(name) {
-            return name.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2);
+            const words = name.split(' ');
+            if (words.length >= 2) {
+                return (words[0][0] + words[1][0]).toUpperCase();
+            }
+            return name.substring(0, 2).toUpperCase();
         }
 
         function getColor(id) {
             const colors = [
-                '#00d2ff', '#3a7bd5', '#667eea', '#764ba2', 
-                '#f093fb', '#f5576c', '#fd746c', '#ff9068'
+                '#667eea', '#764ba2', '#f093fb', '#f5576c',
+                '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'
             ];
             let hash = 0;
             for (let i = 0; i < id.length; i++) {
@@ -842,10 +1086,10 @@
 
         // Управление участниками
         async function kickParticipant(participantId) {
-            if (!confirm('Удалить участника?')) return;
+            if (!confirm('Удалить участника из звонка?')) return;
             
             try {
-                await fetch(API_URL, {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -856,15 +1100,14 @@
                     })
                 });
                 
-                showToast('Участник удален');
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Участник удален');
+                    updateParticipants();
+                }
             } catch (error) {
                 showToast('Ошибка удаления');
             }
-        }
-
-        async function muteParticipant(participantId) {
-            showToast('Функция заглушки в разработке');
-            // Здесь будет отправка сигнала для приглушения участника
         }
 
         // WebRTC соединения
@@ -881,7 +1124,7 @@
                 });
             }
             
-            // Обработчики
+            // Обработчики событий
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
                     sendSignal(peerId, 'candidate', e.candidate);
@@ -892,10 +1135,22 @@
                 handleRemoteTrack(e, peerId);
             };
             
+            pc.oniceconnectionstatechange = () => {
+                if (pc.iceConnectionState === 'disconnected' || 
+                    pc.iceConnectionState === 'failed') {
+                    cleanupPeerConnection(peerId);
+                }
+            };
+            
             // Создаем предложение
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            await sendSignal(peerId, 'offer', offer);
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await sendSignal(peerId, 'offer', offer);
+            } catch (error) {
+                console.error('Create offer error:', error);
+                cleanupPeerConnection(peerId);
+            }
         }
 
         function handleRemoteTrack(event, peerId) {
@@ -905,6 +1160,7 @@
                 audio = document.createElement('audio');
                 audio.id = `audio_${peerId}`;
                 audio.autoplay = true;
+                audio.volume = 0.8;
                 audio.style.display = 'none';
                 document.body.appendChild(audio);
                 
@@ -924,26 +1180,52 @@
             source.connect(analyser);
             
             analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.8;
             const data = new Uint8Array(analyser.frequencyBinCount);
+            
+            let speakingTimeout = null;
             
             function detect() {
                 analyser.getByteFrequencyData(data);
                 const average = data.reduce((a, b) => a + b) / data.length;
+                const isSpeaking = average > 15; // Порог для детектирования речи
                 
-                state.audioAnalyzers[peerId] = {
-                    speaking: average > 20,
-                    lastUpdate: Date.now()
-                };
-                
-                // Обновляем UI если статус изменился
-                if (state.audioAnalyzers[peerId].speaking) {
-                    updateParticipants();
+                if (isSpeaking !== state.audioAnalyzers[peerId]?.speaking) {
+                    state.audioAnalyzers[peerId] = {
+                        speaking: isSpeaking,
+                        lastUpdate: Date.now()
+                    };
+                    
+                    // Обновляем UI
+                    if (isSpeaking) {
+                        renderParticipants();
+                    } else {
+                        // Задержка перед обновлением, чтобы не было мигания
+                        clearTimeout(speakingTimeout);
+                        speakingTimeout = setTimeout(() => {
+                            renderParticipants();
+                        }, 500);
+                    }
                 }
                 
                 requestAnimationFrame(detect);
             }
             
             detect();
+        }
+
+        function cleanupPeerConnection(peerId) {
+            if (state.peerConnections[peerId]) {
+                state.peerConnections[peerId].close();
+                delete state.peerConnections[peerId];
+            }
+            
+            delete state.audioAnalyzers[peerId];
+            
+            const audio = document.getElementById(`audio_${peerId}`);
+            if (audio) {
+                audio.remove();
+            }
         }
 
         // Получение сигналов
@@ -964,28 +1246,32 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.signals) {
+                    if (data.success && data.signals) {
                         data.signals.forEach(handleSignal);
                     }
                 }
             } catch (error) {
-                console.error('Signal error:', error);
+                console.error('Signal polling error:', error);
             }
         }
 
         async function handleSignal(signal) {
             if (signal.from === state.userId) return;
             
-            switch (signal.type) {
-                case 'offer':
-                    await handleOffer(signal.from, signal.data);
-                    break;
-                case 'answer':
-                    await handleAnswer(signal.from, signal.data);
-                    break;
-                case 'candidate':
-                    await handleCandidate(signal.from, signal.data);
-                    break;
+            try {
+                switch (signal.type) {
+                    case 'offer':
+                        await handleOffer(signal.from, signal.data);
+                        break;
+                    case 'answer':
+                        await handleAnswer(signal.from, signal.data);
+                        break;
+                    case 'candidate':
+                        await handleCandidate(signal.from, signal.data);
+                        break;
+                }
+            } catch (error) {
+                console.error('Handle signal error:', error);
             }
         }
 
@@ -1008,6 +1294,8 @@
 
         // Выход из звонка
         async function leaveRoom() {
+            if (!confirm('Завершить звонок?')) return;
+            
             if (state.roomId) {
                 // Отправляем уведомление о выходе
                 try {
@@ -1055,11 +1343,13 @@
             state.roomId = null;
             state.roomOwner = false;
             state.audioAnalyzers = {};
+            state.participants = [];
         }
 
         // Утилиты
-        function showLoading() {
+        function showLoading(text = 'Загрузка...') {
             document.getElementById('loading').style.display = 'flex';
+            document.getElementById('loadingText').textContent = text;
         }
 
         function hideLoading() {
@@ -1071,38 +1361,54 @@
             if (e.key === 'Escape' && state.roomId) {
                 leaveRoom();
             }
-            if (e.key === 'm' && state.roomId) {
+            if (e.key === 'm' && (e.ctrlKey || e.metaKey)) {
                 toggleMic();
+                e.preventDefault();
             }
-            if (e.key === 'Enter' && document.getElementById('roomCode').value) {
+            if (e.key === 'Enter' && document.activeElement.id === 'roomCode') {
                 joinRoom();
+                e.preventDefault();
             }
         });
 
         // Обработка ввода кода
         document.getElementById('roomCode').addEventListener('input', function(e) {
             this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (this.value.length > 6) {
+                this.value = this.value.substring(0, 6);
+            }
         });
 
-        // Предотвращение выключения экрана
+        // Предотвращение выключения экрана во время звонка
         if ('wakeLock' in navigator) {
             let wakeLock = null;
             
             async function requestWakeLock() {
                 try {
-                    wakeLock = await navigator.wakeLock.request('screen');
+                    if (!wakeLock && state.roomId) {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                    }
                 } catch (err) {
                     console.log('Wake Lock error:', err);
                 }
             }
             
-            requestWakeLock();
+            function releaseWakeLock() {
+                if (wakeLock) {
+                    wakeLock.release();
+                    wakeLock = null;
+                }
+            }
             
+            // Запрос блокировки при начале звонка
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible' && state.roomId) {
                     requestWakeLock();
                 }
             });
+            
+            // Освобождение при выходе
+            window.addEventListener('beforeunload', releaseWakeLock);
         }
 
         // PWA установка
@@ -1111,11 +1417,70 @@
             e.preventDefault();
             deferredPrompt = e;
             
-            // Показываем кнопку установки
+            // Показываем предложение установки через 5 секунд
             setTimeout(() => {
-                showToast('Установите приложение для быстрого доступа');
-            }, 3000);
+                if (deferredPrompt) {
+                    showToast('Установите приложение для быстрого доступа');
+                }
+            }, 5000);
         });
+
+        // Обработчики для WebRTC
+        async function handleOffer(peerId, offer) {
+            let pc = state.peerConnections[peerId];
+            
+            if (!pc) {
+                pc = new RTCPeerConnection(config);
+                state.peerConnections[peerId] = pc;
+                
+                // Настройка обработчиков
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        sendSignal(peerId, 'candidate', e.candidate);
+                    }
+                };
+                
+                pc.ontrack = (e) => {
+                    handleRemoteTrack(e, peerId);
+                };
+                
+                pc.oniceconnectionstatechange = () => {
+                    if (pc.iceConnectionState === 'disconnected') {
+                        cleanupPeerConnection(peerId);
+                    }
+                };
+                
+                // Добавляем локальный поток
+                if (state.localStream) {
+                    state.localStream.getTracks().forEach(track => {
+                        pc.addTrack(track, state.localStream);
+                    });
+                }
+            }
+            
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await sendSignal(peerId, 'answer', answer);
+        }
+
+        async function handleAnswer(peerId, answer) {
+            const pc = state.peerConnections[peerId];
+            if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            }
+        }
+
+        async function handleCandidate(peerId, candidate) {
+            const pc = state.peerConnections[peerId];
+            if (pc && candidate) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    console.error('Add ICE candidate error:', error);
+                }
+            }
+        }
     </script>
 </body>
 </html>
