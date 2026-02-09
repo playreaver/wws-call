@@ -2,90 +2,685 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>WWS Call</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WWS Secure Audio Call</title>
 <style>
-body { font-family: Arial; text-align:center; background:#111; color:white; }
-button { padding:10px 20px; margin:10px; }
-input { padding:10px; }
+body { 
+    font-family: Arial, sans-serif; 
+    text-align: center; 
+    background: #111; 
+    color: white; 
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #222;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+button { 
+    padding: 12px 24px; 
+    margin: 10px; 
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.3s;
+}
+button:hover {
+    background: #45a049;
+}
+button:disabled {
+    background: #666;
+    cursor: not-allowed;
+}
+input { 
+    padding: 12px; 
+    width: 200px;
+    border: 1px solid #444;
+    border-radius: 5px;
+    background: #333;
+    color: white;
+}
+.status {
+    margin: 20px 0;
+    padding: 10px;
+    background: #333;
+    border-radius: 5px;
+}
+.log {
+    background: #000;
+    color: #0f0;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: left;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+}
+.connection-status {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+.connected { background: #0f0; }
+.disconnected { background: #f00; }
+.connecting { background: #ff0; }
 </style>
 </head>
 <body>
 
-<h2>WWS Audio Call</h2>
-
-<button onclick="createRoom()">Создать комнату</button>
-<br><br>
-<input id="roomInput" placeholder="ID комнаты">
-<button onclick="joinRoom()">Войти</button>
-
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<div class="container">
+    <h2>🔒 Secure Audio Call</h2>
+    
+    <div class="status">
+        <p>ID пользователя: <span id="userIdDisplay"></span></p>
+        <p>Комната: <span id="roomIdDisplay">Не подключено</span></p>
+        <p>Статус: 
+            <span class="connection-status disconnected" id="connectionStatus"></span>
+            <span id="statusText">Отключено</span>
+        </p>
+    </div>
+    
+    <button onclick="createRoom()" id="createBtn">Создать комнату</button>
+    
+    <br><br>
+    
+    <input id="roomInput" placeholder="Введите ID комнаты">
+    <button onclick="joinRoom()" id="joinBtn">Войти в комнату</button>
+    
+    <br><br>
+    
+    <div class="log" id="log"></div>
+</div>
 
 <script>
-const firebaseConfig = {
-  apiKey: "ТВОЙ_API_KEY",
-  databaseURL: "https://wws-id-default-rtdb.europe-west1.firebasedatabase.app"
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
 const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
 
-let localStream;
+let localStream = null;
+let roomId = null;
+let userId = null;
+let signalingChannel = null;
 let peerConnections = {};
-let roomId;
-let userId = Math.random().toString(36).substring(7);
+let iceCandidatesQueue = {};
 
+// Логирование
+function log(message, type = 'info') {
+    const logElement = document.getElementById('log');
+    const timestamp = new Date().toLocaleTimeString();
+    const color = type === 'error' ? '#f00' : type === 'warning' ? '#ff0' : '#0f0';
+    logElement.innerHTML += `<span style="color:${color}">[${timestamp}] ${message}</span><br>`;
+    logElement.scrollTop = logElement.scrollHeight;
+}
+
+// Обновление статуса
+function updateStatus(message, state = 'disconnected') {
+    document.getElementById('statusText').textContent = message;
+    const statusElement = document.getElementById('connectionStatus');
+    statusElement.className = 'connection-status ' + state;
+    
+    if (state === 'connected') statusElement.style.background = '#0f0';
+    else if (state === 'connecting') statusElement.style.background = '#ff0';
+    else statusElement.style.background = '#f00';
+}
+
+// Генерация ID пользователя
+function generateUserId() {
+    return 'user_' + Math.random().toString(36).substring(2, 15) + 
+           Math.random().toString(36).substring(2, 15);
+}
+
+// Запрос к API
+async function apiCall(endpoint, method = 'GET', data = null) {
+    try {
+        const options = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-Id': userId || 'anonymous'
+            }
+        };
+        
+        if (data) {
+            options.body = JSON.stringify(data);
+        }
+        
+        log(`Отправка запроса: ${method} ${endpoint}`);
+        const response = await fetch(`${API_URL}${endpoint}`, options);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        log(`Получен ответ от ${endpoint}`);
+        return result;
+    } catch (error) {
+        log(`Ошибка API: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+// Создание комнаты
 async function createRoom() {
-  const res = await fetch(API_URL, {
-    method: "POST"
-  });
-  const data = await res.json();
-  alert("Комната создана: " + data.roomId);
+    try {
+        updateStatus('Создание комнаты...', 'connecting');
+        log('Создание новой комнаты...');
+        
+        const buttons = ['createBtn', 'joinBtn'];
+        buttons.forEach(id => document.getElementById(id).disabled = true);
+        
+        // Генерируем ID пользователя
+        userId = generateUserId();
+        document.getElementById('userIdDisplay').textContent = userId;
+        
+        // Создаем комнату через API
+        const result = await apiCall('/room', 'POST', { userId });
+        
+        if (result.success && result.roomId) {
+            roomId = result.roomId;
+            document.getElementById('roomIdDisplay').textContent = roomId;
+            updateStatus('Комната создана', 'connected');
+            log(`Комната создана: ${roomId}`);
+            
+            // Автоматически присоединяемся к созданной комнате
+            await joinExistingRoom(roomId);
+            
+            alert(`✅ Комната создана!\nID: ${roomId}\nПоделитесь этим ID с другими участниками.`);
+        } else {
+            throw new Error('Не удалось создать комнату');
+        }
+        
+        buttons.forEach(id => document.getElementById(id).disabled = false);
+    } catch (error) {
+        updateStatus('Ошибка создания', 'disconnected');
+        log(`Ошибка при создании комнаты: ${error.message}`, 'error');
+        alert(`❌ Ошибка: ${error.message}`);
+        
+        ['createBtn', 'joinBtn'].forEach(id => document.getElementById(id).disabled = false);
+    }
 }
 
+// Присоединение к комнате
 async function joinRoom() {
-  roomId = document.getElementById("roomInput").value;
-  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
-
-  db.ref("rooms/" + roomId + "/participants/" + userId).set({
-    joinedAt: Date.now()
-  });
-
-  listenForParticipants();
+    const inputRoomId = document.getElementById('roomInput').value.trim().toUpperCase();
+    
+    if (!inputRoomId) {
+        alert('Введите ID комнаты');
+        return;
+    }
+    
+    if (inputRoomId.length !== 6) {
+        alert('ID комнаты должен состоять из 6 символов');
+        return;
+    }
+    
+    await joinExistingRoom(inputRoomId);
 }
 
-function listenForParticipants() {
-  db.ref("rooms/" + roomId + "/participants").on("value", snapshot => {
-    const participants = snapshot.val();
-    if (!participants) return;
+// Присоединение к существующей комнате
+async function joinExistingRoom(targetRoomId) {
+    try {
+        updateStatus('Подключение к комнате...', 'connecting');
+        log(`Присоединение к комнате: ${targetRoomId}`);
+        
+        const buttons = ['createBtn', 'joinBtn'];
+        buttons.forEach(id => document.getElementById(id).disabled = true);
+        
+        // Генерируем ID пользователя если еще нет
+        if (!userId) {
+            userId = generateUserId();
+            document.getElementById('userIdDisplay').textContent = userId;
+        }
+        
+        // Запрашиваем доступ к микрофону
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
+            });
+            log('Микрофон подключен');
+        } catch (mediaError) {
+            throw new Error('Не удалось получить доступ к микрофону. Пожалуйста, разрешите доступ.');
+        }
+        
+        // Присоединяемся к комнате через API
+        const joinResult = await apiCall(`/room/${targetRoomId}/join`, 'POST', { 
+            userId,
+            userName: `User_${userId.substring(0, 4)}`
+        });
+        
+        if (!joinResult.success) {
+            throw new Error(joinResult.error || 'Не удалось присоединиться к комнате');
+        }
+        
+        roomId = targetRoomId;
+        document.getElementById('roomIdDisplay').textContent = roomId;
+        
+        updateStatus('Подключено к комнате', 'connected');
+        log(`Успешно присоединились к комнате ${roomId}`);
+        
+        // Инициализируем WebSocket для сигналинга
+        await initSignaling();
+        
+        // Получаем список участников
+        await fetchParticipants();
+        
+        buttons.forEach(id => document.getElementById(id).disabled = false);
+        
+    } catch (error) {
+        updateStatus('Ошибка подключения', 'disconnected');
+        log(`Ошибка присоединения: ${error.message}`, 'error');
+        alert(`❌ Ошибка: ${error.message}`);
+        
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        
+        ['createBtn', 'joinBtn'].forEach(id => document.getElementById(id).disabled = false);
+    }
+}
 
-    Object.keys(participants).forEach(id => {
-      if (id !== userId && !peerConnections[id]) {
-        createPeerConnection(id);
-      }
+// Инициализация WebSocket для сигналинга
+async function initSignaling() {
+    try {
+        log('Инициализация сигналинга...');
+        
+        // Создаем WebSocket соединение
+        const wsUrl = API_URL.replace('https://', 'wss://').replace('/room', '/ws');
+        signalingChannel = new WebSocket(`${wsUrl}?roomId=${roomId}&userId=${userId}`);
+        
+        signalingChannel.onopen = () => {
+            log('WebSocket соединение установлено');
+            updateStatus('Соединение установлено', 'connected');
+        };
+        
+        signalingChannel.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleSignalingMessage(data);
+            } catch (error) {
+                log(`Ошибка обработки сообщения: ${error}`, 'error');
+            }
+        };
+        
+        signalingChannel.onclose = () => {
+            log('WebSocket соединение закрыто', 'warning');
+            updateStatus('Соединение разорвано', 'disconnected');
+            
+            // Пытаемся переподключиться
+            setTimeout(() => {
+                if (roomId) {
+                    log('Попытка переподключения...');
+                    initSignaling();
+                }
+            }, 3000);
+        };
+        
+        signalingChannel.onerror = (error) => {
+            log(`WebSocket ошибка: ${error}`, 'error');
+        };
+        
+    } catch (error) {
+        log(`Ошибка инициализации WebSocket: ${error.message}`, 'error');
+    }
+}
+
+// Обработка сигнальных сообщений
+function handleSignalingMessage(data) {
+    const { type, from, to, payload } = data;
+    
+    if (to !== userId && to !== 'all') return;
+    
+    switch (type) {
+        case 'offer':
+            log(`Получено предложение от ${from}`);
+            handleOffer(from, payload);
+            break;
+            
+        case 'answer':
+            log(`Получен ответ от ${from}`);
+            handleAnswer(from, payload);
+            break;
+            
+        case 'ice-candidate':
+            log(`Получен ICE кандидат от ${from}`);
+            handleIceCandidate(from, payload);
+            break;
+            
+        case 'participant-joined':
+            log(`Новый участник: ${from}`);
+            handleNewParticipant(from);
+            break;
+            
+        case 'participant-left':
+            log(`Участник вышел: ${from}`);
+            handleParticipantLeft(from);
+            break;
+            
+        case 'ping':
+            // Отвечаем на пинг
+            sendSignalingMessage({
+                type: 'pong',
+                from: userId,
+                to: from,
+                timestamp: Date.now()
+            });
+            break;
+    }
+}
+
+// Отправка сигнального сообщения
+function sendSignalingMessage(message) {
+    if (signalingChannel && signalingChannel.readyState === WebSocket.OPEN) {
+        signalingChannel.send(JSON.stringify(message));
+    } else {
+        log('WebSocket не готов к отправке', 'warning');
+    }
+}
+
+// Создание PeerConnection
+function createPeerConnection(remoteUserId) {
+    try {
+        log(`Создание соединения с ${remoteUserId}`);
+        
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 10,
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
+        };
+        
+        const pc = new RTCPeerConnection(configuration);
+        peerConnections[remoteUserId] = pc;
+        
+        // Добавляем локальные треки
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+            log(`Добавлены локальные треки для ${remoteUserId}`);
+        }
+        
+        // Обработчики событий
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                sendSignalingMessage({
+                    type: 'ice-candidate',
+                    from: userId,
+                    to: remoteUserId,
+                    payload: event.candidate
+                });
+            }
+        };
+        
+        pc.ontrack = (event) => {
+            log(`Получен удаленный поток от ${remoteUserId}`);
+            handleRemoteStream(event.streams[0], remoteUserId);
+        };
+        
+        pc.oniceconnectionstatechange = () => {
+            log(`ICE состояние с ${remoteUserId}: ${pc.iceConnectionState}`);
+            
+            if (pc.iceConnectionState === 'failed' || 
+                pc.iceConnectionState === 'disconnected') {
+                log(`Проблема с соединением ${remoteUserId}`, 'warning');
+            }
+        };
+        
+        pc.onicegatheringstatechange = () => {
+            log(`ICE сбор с ${remoteUserId}: ${pc.iceGatheringState}`);
+        };
+        
+        pc.onsignalingstatechange = () => {
+            log(`Сигнальное состояние с ${remoteUserId}: ${pc.signalingState}`);
+        };
+        
+        // Обработка ожидающих ICE кандидатов
+        if (iceCandidatesQueue[remoteUserId]) {
+            iceCandidatesQueue[remoteUserId].forEach(candidate => {
+                pc.addIceCandidate(new RTCIceCandidate(candidate));
+            });
+            delete iceCandidatesQueue[remoteUserId];
+        }
+        
+        return pc;
+        
+    } catch (error) {
+        log(`Ошибка создания PeerConnection: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+// Обработка предложения
+async function handleOffer(from, offer) {
+    try {
+        log(`Обработка предложения от ${from}`);
+        
+        let pc = peerConnections[from];
+        if (!pc) {
+            pc = createPeerConnection(from);
+        }
+        
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        log(`Установлено удаленное описание от ${from}`);
+        
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        log(`Создан ответ для ${from}`);
+        
+        sendSignalingMessage({
+            type: 'answer',
+            from: userId,
+            to: from,
+            payload: answer
+        });
+        
+    } catch (error) {
+        log(`Ошибка обработки предложения: ${error.message}`, 'error');
+    }
+}
+
+// Обработка ответа
+async function handleAnswer(from, answer) {
+    try {
+        const pc = peerConnections[from];
+        if (pc && pc.signalingState !== 'stable') {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            log(`Установлен ответ от ${from}`);
+        }
+    } catch (error) {
+        log(`Ошибка обработки ответа: ${error.message}`, 'error');
+    }
+}
+
+// Обработка ICE кандидата
+async function handleIceCandidate(from, candidate) {
+    try {
+        const pc = peerConnections[from];
+        if (pc && pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            log(`Добавлен ICE кандидат от ${from}`);
+        } else {
+            // Сохраняем кандидата в очередь
+            if (!iceCandidatesQueue[from]) {
+                iceCandidatesQueue[from] = [];
+            }
+            iceCandidatesQueue[from].push(candidate);
+            log(`ICE кандидат от ${from} сохранен в очередь`);
+        }
+    } catch (error) {
+        log(`Ошибка добавления ICE кандидата: ${error.message}`, 'error');
+    }
+}
+
+// Обработка нового участника
+async function handleNewParticipant(participantId) {
+    if (participantId === userId) return;
+    
+    log(`Инициирование соединения с новым участником: ${participantId}`);
+    
+    try {
+        const pc = createPeerConnection(participantId);
+        
+        // Создаем предложение
+        const offer = await pc.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: false
+        });
+        
+        await pc.setLocalDescription(offer);
+        log(`Создано предложение для ${participantId}`);
+        
+        // Отправляем предложение
+        sendSignalingMessage({
+            type: 'offer',
+            from: userId,
+            to: participantId,
+            payload: offer
+        });
+        
+    } catch (error) {
+        log(`Ошибка подключения к ${participantId}: ${error.message}`, 'error');
+    }
+}
+
+// Обработка выхода участника
+function handleParticipantLeft(participantId) {
+    if (peerConnections[participantId]) {
+        peerConnections[participantId].close();
+        delete peerConnections[participantId];
+        log(`Соединение с ${participantId} закрыто`);
+    }
+    
+    // Удаляем аудио элемент если есть
+    const audioElement = document.getElementById(`audio-${participantId}`);
+    if (audioElement) {
+        audioElement.remove();
+    }
+}
+
+// Обработка удаленного потока
+function handleRemoteStream(stream, remoteUserId) {
+    try {
+        // Создаем скрытый аудио элемент
+        const audio = document.createElement('audio');
+        audio.id = `audio-${remoteUserId}`;
+        audio.autoplay = true;
+        audio.style.display = 'none';
+        audio.volume = 1.0;
+        
+        // Используем AudioContext для лучшего контроля
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        const destination = audioContext.createMediaStreamDestination();
+        
+        source.connect(destination);
+        audio.srcObject = destination.stream;
+        
+        document.body.appendChild(audio);
+        log(`Воспроизведение аудио от ${remoteUserId}`);
+        
+    } catch (error) {
+        log(`Ошибка обработки удаленного потока: ${error.message}`, 'error');
+    }
+}
+
+// Получение списка участников
+async function fetchParticipants() {
+    try {
+        const result = await apiCall(`/room/${roomId}/participants`);
+        
+        if (result.success && result.participants) {
+            const otherParticipants = result.participants.filter(p => p.id !== userId);
+            
+            otherParticipants.forEach(participant => {
+                if (!peerConnections[participant.id]) {
+                    handleNewParticipant(participant.id);
+                }
+            });
+            
+            log(`В комнате ${otherParticipants.length} других участников`);
+        }
+    } catch (error) {
+        log(`Ошибка получения участников: ${error.message}`, 'error');
+    }
+}
+
+// Очистка при выходе
+async function cleanup() {
+    log('Очистка ресурсов...');
+    
+    // Закрываем все PeerConnections
+    Object.values(peerConnections).forEach(pc => {
+        pc.close();
     });
-  });
+    peerConnections = {};
+    
+    // Закрываем WebSocket
+    if (signalingChannel) {
+        signalingChannel.close();
+        signalingChannel = null;
+    }
+    
+    // Останавливаем локальный поток
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    // Уведомляем сервер о выходе
+    if (roomId && userId) {
+        try {
+            await apiCall(`/room/${roomId}/leave`, 'POST', { userId });
+        } catch (error) {
+            // Игнорируем ошибки при выходе
+        }
+    }
+    
+    roomId = null;
+    updateStatus('Отключено', 'disconnected');
+    document.getElementById('roomIdDisplay').textContent = 'Не подключено';
+    
+    log('Ресурсы очищены');
 }
 
-function createPeerConnection(remoteId) {
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
+// Обработка закрытия страницы
+window.addEventListener('beforeunload', async (event) => {
+    await cleanup();
+});
 
-  localStream.getTracks().forEach(track => {
-    pc.addTrack(track, localStream);
-  });
+// Обработка видимости страницы
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        log('Страница скрыта', 'warning');
+    } else {
+        log('Страница видна');
+    }
+});
 
-  pc.ontrack = event => {
-    const audio = new Audio();
-    audio.srcObject = event.streams[0];
-    audio.play();
-  };
-
-  peerConnections[remoteId] = pc;
-}
+// Инициализация
+log('Приложение инициализировано');
+updateStatus('Готово', 'disconnected');
 </script>
 </body>
 </html>
