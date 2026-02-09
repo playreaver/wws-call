@@ -613,8 +613,8 @@
         </div>
     </div>
 
-    <!-- Audio Elements -->
-    <audio id="remoteAudio" autoplay></audio>
+    <!-- Audio Elements (will be created dynamically) -->
+    <div id="audioContainer"></div>
 
     <script>
         // Конфигурация
@@ -647,7 +647,6 @@
             isSpeaker: false,
             signalInterval: null,
             updateInterval: null,
-            activeSpeaker: null,
             participants: []
         };
 
@@ -997,7 +996,10 @@
         function connectToNewParticipants() {
             state.participants.forEach(p => {
                 if (p.id !== state.userId && !state.peerConnections[p.id]) {
-                    connectToPeer(p.id);
+                    // Сравниваем ID - только пользователь с меньшим ID инициирует соединение
+                    if (state.userId < p.id) {
+                        createPeerConnection(p.id);
+                    }
                 }
             });
         }
@@ -1111,107 +1113,141 @@
         }
 
         // WebRTC соединения
-        async function connectToPeer(peerId) {
+        async function createPeerConnection(peerId) {
             if (state.peerConnections[peerId]) return;
             
-            const pc = new RTCPeerConnection(config);
-            state.peerConnections[peerId] = pc;
+            console.log(`Creating peer connection to ${peerId}`);
             
-            // Добавляем локальный поток
-            if (state.localStream) {
-                state.localStream.getTracks().forEach(track => {
-                    pc.addTrack(track, state.localStream);
-                });
-            }
-            
-            // Обработчики событий
-            pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    sendSignal(peerId, 'candidate', e.candidate);
-                }
-            };
-            
-            pc.ontrack = (e) => {
-                handleRemoteTrack(e, peerId);
-            };
-            
-            pc.oniceconnectionstatechange = () => {
-                if (pc.iceConnectionState === 'disconnected' || 
-                    pc.iceConnectionState === 'failed') {
-                    cleanupPeerConnection(peerId);
-                }
-            };
-            
-            // Создаем предложение
             try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                await sendSignal(peerId, 'offer', offer);
+                const pc = new RTCPeerConnection(config);
+                state.peerConnections[peerId] = pc;
+                
+                // Добавляем локальный поток
+                if (state.localStream) {
+                    state.localStream.getTracks().forEach(track => {
+                        pc.addTrack(track, state.localStream);
+                    });
+                }
+                
+                // Обработчики событий
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        console.log(`ICE candidate for ${peerId}:`, e.candidate);
+                        sendSignal(peerId, 'candidate', e.candidate);
+                    }
+                };
+                
+                pc.ontrack = (e) => {
+                    console.log(`Received track from ${peerId}`);
+                    handleRemoteTrack(e, peerId);
+                };
+                
+                pc.oniceconnectionstatechange = () => {
+                    console.log(`ICE state for ${peerId}:`, pc.iceConnectionState);
+                    if (pc.iceConnectionState === 'disconnected' || 
+                        pc.iceConnectionState === 'failed' ||
+                        pc.iceConnectionState === 'closed') {
+                        cleanupPeerConnection(peerId);
+                    }
+                };
+                
+                // Создаем предложение только если мы инициатор (userId < peerId)
+                if (state.userId < peerId) {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        console.log(`Created offer for ${peerId}:`, offer);
+                        await sendSignal(peerId, 'offer', offer);
+                    } catch (error) {
+                        console.error('Create offer error:', error);
+                    }
+                }
+                
             } catch (error) {
-                console.error('Create offer error:', error);
+                console.error('Create peer connection error:', error);
                 cleanupPeerConnection(peerId);
             }
         }
 
         function handleRemoteTrack(event, peerId) {
-            let audio = document.getElementById(`audio_${peerId}`);
+            console.log(`Setting up remote track for ${peerId}`);
             
-            if (!audio) {
-                audio = document.createElement('audio');
-                audio.id = `audio_${peerId}`;
-                audio.autoplay = true;
-                audio.volume = 0.8;
-                audio.style.display = 'none';
-                document.body.appendChild(audio);
+            // Удаляем существующий аудио элемент
+            const existingAudio = document.getElementById(`audio_${peerId}`);
+            if (existingAudio) {
+                existingAudio.remove();
+            }
+            
+            // Создаем новый аудио элемент
+            const audio = document.createElement('audio');
+            audio.id = `audio_${peerId}`;
+            audio.autoplay = true;
+            audio.volume = 0.8;
+            audio.style.display = 'none';
+            
+            // Устанавливаем поток
+            if (event.streams && event.streams[0]) {
+                audio.srcObject = event.streams[0];
+                console.log(`Set audio srcObject for ${peerId}`);
                 
-                // Анализатор речи
+                // Настраиваем детектор речи
                 setupSpeechDetector(audio, peerId);
             }
             
-            audio.srcObject = event.streams[0];
+            document.getElementById('audioContainer').appendChild(audio);
         }
 
         function setupSpeechDetector(audio, peerId) {
             if (!window.AudioContext) return;
             
-            const audioContext = new AudioContext();
-            const analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(audio.srcObject);
-            source.connect(analyser);
-            
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.8;
-            const data = new Uint8Array(analyser.frequencyBinCount);
-            
-            let speakingTimeout = null;
-            
-            function detect() {
-                analyser.getByteFrequencyData(data);
-                const average = data.reduce((a, b) => a + b) / data.length;
-                const isSpeaking = average > 15; // Порог для детектирования речи
-                
-                if (isSpeaking !== state.audioAnalyzers[peerId]?.speaking) {
-                    state.audioAnalyzers[peerId] = {
-                        speaking: isSpeaking,
-                        lastUpdate: Date.now()
-                    };
+            // Ждем пока аудио будет готово
+            audio.oncanplay = () => {
+                try {
+                    const audioContext = new AudioContext();
+                    const analyser = audioContext.createAnalyser();
                     
-                    // Обновляем UI
-                    if (isSpeaking) {
-                        renderParticipants();
-                    } else {
-                        // Задержка перед обновлением, чтобы не было мигания
-                        clearTimeout(speakingTimeout);
-                        speakingTimeout = setTimeout(() => {
-                            renderParticipants();
-                        }, 500);
+                    // Проверяем что srcObject существует и это MediaStream
+                    if (audio.srcObject && audio.srcObject instanceof MediaStream) {
+                        const source = audioContext.createMediaStreamSource(audio.srcObject);
+                        source.connect(analyser);
+                        
+                        analyser.fftSize = 256;
+                        analyser.smoothingTimeConstant = 0.8;
+                        const data = new Uint8Array(analyser.frequencyBinCount);
+                        
+                        let speakingTimeout = null;
+                        
+                        function detect() {
+                            analyser.getByteFrequencyData(data);
+                            const average = data.reduce((a, b) => a + b) / data.length;
+                            const isSpeaking = average > 15;
+                            
+                            if (isSpeaking !== state.audioAnalyzers[peerId]?.speaking) {
+                                state.audioAnalyzers[peerId] = {
+                                    speaking: isSpeaking,
+                                    lastUpdate: Date.now()
+                                };
+                                
+                                // Обновляем UI
+                                if (isSpeaking) {
+                                    renderParticipants();
+                                } else {
+                                    clearTimeout(speakingTimeout);
+                                    speakingTimeout = setTimeout(() => {
+                                        renderParticipants();
+                                    }, 500);
+                                }
+                            }
+                            
+                            requestAnimationFrame(detect);
+                        }
+                        
+                        detect();
                     }
+                } catch (error) {
+                    console.error('Speech detector error:', error);
                 }
-                
-                requestAnimationFrame(detect);
-            }
-            
-            detect();
+            };
         }
 
         function cleanupPeerConnection(peerId) {
@@ -1247,7 +1283,9 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success && data.signals) {
-                        data.signals.forEach(handleSignal);
+                        for (const signal of data.signals) {
+                            await handleSignal(signal);
+                        }
                     }
                 }
             } catch (error) {
@@ -1292,6 +1330,91 @@
             }
         }
 
+        // Обработка предложения
+        async function handleOffer(peerId, offer) {
+            console.log(`Received offer from ${peerId}`);
+            
+            let pc = state.peerConnections[peerId];
+            
+            if (!pc) {
+                pc = new RTCPeerConnection(config);
+                state.peerConnections[peerId] = pc;
+                
+                // Настройка обработчиков
+                pc.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        sendSignal(peerId, 'candidate', e.candidate);
+                    }
+                };
+                
+                pc.ontrack = (e) => {
+                    handleRemoteTrack(e, peerId);
+                };
+                
+                // Добавляем локальный поток
+                if (state.localStream) {
+                    state.localStream.getTracks().forEach(track => {
+                        pc.addTrack(track, state.localStream);
+                    });
+                }
+            }
+            
+            // Проверяем текущее состояние
+            if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await sendSignal(peerId, 'answer', answer);
+                
+                console.log(`Sent answer to ${peerId}`);
+            } else {
+                console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
+            }
+        }
+
+        // Обработка ответа
+        async function handleAnswer(peerId, answer) {
+            console.log(`Received answer from ${peerId}`);
+            
+            const pc = state.peerConnections[peerId];
+            if (!pc) {
+                console.warn(`No peer connection for ${peerId}`);
+                return;
+            }
+            
+            // Проверяем что мы в правильном состоянии
+            if (pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log(`Set remote description from ${peerId}`);
+            } else {
+                console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
+            }
+        }
+
+        // Обработка кандидата
+        async function handleCandidate(peerId, candidate) {
+            console.log(`Received candidate from ${peerId}`);
+            
+            const pc = state.peerConnections[peerId];
+            if (!pc) {
+                console.warn(`No peer connection for ${peerId}`);
+                return;
+            }
+            
+            // Проверяем что удаленное описание установлено
+            if (pc.remoteDescription) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    console.error('Add ICE candidate error:', error);
+                }
+            } else {
+                console.warn('Remote description not set yet, caching candidate');
+                // Можно кэшировать кандидатов и добавить позже
+            }
+        }
+
         // Выход из звонка
         async function leaveRoom() {
             if (!confirm('Завершить звонок?')) return;
@@ -1327,7 +1450,11 @@
             if (state.signalInterval) clearInterval(state.signalInterval);
             
             // Закрытие соединений
-            Object.values(state.peerConnections).forEach(pc => pc.close());
+            Object.values(state.peerConnections).forEach(pc => {
+                if (pc) {
+                    pc.close();
+                }
+            });
             state.peerConnections = {};
             
             // Остановка потока
@@ -1337,7 +1464,7 @@
             }
             
             // Очистка аудио элементов
-            document.querySelectorAll('[id^="audio_"]').forEach(el => el.remove());
+            document.getElementById('audioContainer').innerHTML = '';
             
             // Сброс состояния
             state.roomId = null;
@@ -1424,63 +1551,6 @@
                 }
             }, 5000);
         });
-
-        // Обработчики для WebRTC
-        async function handleOffer(peerId, offer) {
-            let pc = state.peerConnections[peerId];
-            
-            if (!pc) {
-                pc = new RTCPeerConnection(config);
-                state.peerConnections[peerId] = pc;
-                
-                // Настройка обработчиков
-                pc.onicecandidate = (e) => {
-                    if (e.candidate) {
-                        sendSignal(peerId, 'candidate', e.candidate);
-                    }
-                };
-                
-                pc.ontrack = (e) => {
-                    handleRemoteTrack(e, peerId);
-                };
-                
-                pc.oniceconnectionstatechange = () => {
-                    if (pc.iceConnectionState === 'disconnected') {
-                        cleanupPeerConnection(peerId);
-                    }
-                };
-                
-                // Добавляем локальный поток
-                if (state.localStream) {
-                    state.localStream.getTracks().forEach(track => {
-                        pc.addTrack(track, state.localStream);
-                    });
-                }
-            }
-            
-            await pc.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            await sendSignal(peerId, 'answer', answer);
-        }
-
-        async function handleAnswer(peerId, answer) {
-            const pc = state.peerConnections[peerId];
-            if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            }
-        }
-
-        async function handleCandidate(peerId, candidate) {
-            const pc = state.peerConnections[peerId];
-            if (pc && candidate) {
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (error) {
-                    console.error('Add ICE candidate error:', error);
-                }
-            }
-        }
     </script>
 </body>
 </html>
