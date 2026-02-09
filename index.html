@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WWS Audio Call</title>
+<title>WWS Audio Call - Test</title>
 <style>
 body { 
     font-family: Arial, sans-serif; 
@@ -43,6 +43,18 @@ input {
     background: #333;
     color: white;
 }
+.log {
+    background: #000;
+    color: #0f0;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: left;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    margin-top: 20px;
+}
 .status {
     margin: 20px 0;
     padding: 10px;
@@ -54,178 +66,204 @@ input {
 <body>
 
 <div class="container">
-    <h2>WWS Audio Call</h2>
+    <h2>🔧 WWS Audio Call - Test</h2>
     
     <div class="status">
-        <p>ID пользователя: <span id="userIdDisplay"></span></p>
-        <p>Комната: <span id="roomIdDisplay">Не подключено</span></p>
+        <p>API URL: <code id="apiUrl"></code></p>
+        <p>Статус: <span id="statusText">Проверка...</span></p>
     </div>
     
-    <button onclick="createRoom()">Создать комнату</button>
+    <button onclick="testConnection()">🔍 Тест подключения</button>
+    <button onclick="createRoom()">➕ Создать комнату</button>
     
     <br><br>
     
-    <input id="roomInput" placeholder="ID комнаты (6 символов)">
-    <button onclick="joinRoom()">Войти в комнату</button>
+    <input id="roomInput" placeholder="Введите ID комнаты">
+    <button onclick="joinRoom()">🚪 Войти в комнату</button>
+    
+    <div class="log" id="log"></div>
 </div>
 
 <script>
 const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
-
-let localStream;
-let roomId;
 let userId = 'user_' + Math.random().toString(36).substring(2, 9);
 
-// Отображение ID пользователя
-document.getElementById('userIdDisplay').textContent = userId;
+// Отображение API URL
+document.getElementById('apiUrl').textContent = API_URL;
 
-async function createRoom() {
-    try {
-        const response = await fetch(`${API_URL}/room`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-User-Id": userId
-            },
-            body: JSON.stringify({ userId: userId })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success && data.roomId) {
-            roomId = data.roomId;
-            document.getElementById('roomIdDisplay').textContent = roomId;
-            
-            alert("✅ Комната создана: " + roomId + "\nПоделитесь этим ID с другими участниками");
-            
-            // Автоматически присоединяемся к созданной комнате
-            await joinExistingRoom(roomId);
-        } else {
-            throw new Error("Неверный ответ от сервера");
-        }
-    } catch (error) {
-        console.error("Error creating room:", error);
-        alert("❌ Ошибка при создании комнаты: " + error.message);
-    }
+// Логирование
+function log(message, type = 'info') {
+    const logElement = document.getElementById('log');
+    const timestamp = new Date().toLocaleTimeString();
+    const color = type === 'error' ? '#f00' : type === 'warning' ? '#ff0' : '#0f0';
+    logElement.innerHTML += `<span style="color:${color}">[${timestamp}] ${message}</span><br>`;
+    logElement.scrollTop = logElement.scrollHeight;
 }
 
-async function joinRoom() {
-    const inputRoomId = document.getElementById("roomInput").value.trim().toUpperCase();
-    
-    if (!inputRoomId) {
-        alert("Введите ID комнаты");
-        return;
-    }
-    
-    if (inputRoomId.length !== 6) {
-        alert("ID комнаты должен состоять из 6 символов");
-        return;
-    }
-    
-    await joinExistingRoom(inputRoomId);
+// Обновление статуса
+function updateStatus(message, isError = false) {
+    const statusElement = document.getElementById('statusText');
+    statusElement.textContent = message;
+    statusElement.style.color = isError ? '#f00' : '#0f0';
 }
 
-async function joinExistingRoom(roomIdToJoin) {
-    try {
-        // Запрашиваем доступ к микрофону
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
-        });
-        
-        // Присоединяемся к комнате через API
-        const response = await fetch(`${API_URL}/room/${roomIdToJoin}/join`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-User-Id": userId
-            },
-            body: JSON.stringify({ 
-                userId: userId,
-                userName: `User_${userId.substring(0, 4)}`
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-            throw new Error(data.error || 'Не удалось присоединиться к комнате');
-        }
-        
-        roomId = roomIdToJoin;
-        document.getElementById('roomIdDisplay').textContent = roomId;
-        
-        alert("✅ Успешно присоединились к комнате!");
-        
-        // Здесь будет логика для WebRTC соединения с другими участниками
-        // Для начала можно просто показать, что подключение успешно
-        console.log("Connected to room:", roomId);
-        console.log("Local stream:", localStream);
-        
-    } catch (error) {
-        console.error("Error joining room:", error);
-        
-        if (error.name === "NotAllowedError") {
-            alert("❌ Доступ к микрофону запрещен. Разрешите доступ к микрофону и попробуйте снова.");
-        } else {
-            alert("❌ Ошибка при подключении к комнате: " + error.message);
-        }
-    }
-}
-
-// Очистка при закрытии страницы
-window.addEventListener('beforeunload', async () => {
-    if (roomId && userId) {
-        try {
-            // Отправляем запрос на выход из комнаты
-            await fetch(`${API_URL}/room/${roomId}/leave`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ userId: userId })
-            });
-            
-            // Останавливаем локальный поток
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-        } catch (error) {
-            console.error("Error during cleanup:", error);
-        }
-    }
-});
-
-// Проверка соединения
+// Тест подключения
 async function testConnection() {
     try {
-        const response = await fetch(API_URL, {
+        updateStatus('Тестируем подключение...');
+        log('Отправляем OPTIONS запрос для проверки CORS...');
+        
+        // Проверяем OPTIONS запрос
+        const optionsResponse = await fetch(API_URL + '/health', {
             method: 'OPTIONS'
         });
         
-        if (response.ok) {
-            console.log("✅ Подключение к серверу успешно!");
-        } else {
-            console.error("❌ Ошибка подключения:", response.status);
+        log(`OPTIONS ответ: ${optionsResponse.status} ${optionsResponse.statusText}`);
+        
+        if (!optionsResponse.ok) {
+            throw new Error(`OPTIONS failed: ${optionsResponse.status}`);
         }
+        
+        // Проверяем GET запрос
+        log('Отправляем GET запрос для проверки сервера...');
+        const getResponse = await fetch(API_URL + '/health', {
+            method: 'GET'
+        });
+        
+        log(`GET ответ: ${getResponse.status} ${getResponse.statusText}`);
+        
+        if (!getResponse.ok) {
+            throw new Error(`GET failed: ${getResponse.status}`);
+        }
+        
+        const data = await getResponse.json();
+        log(`Данные ответа: ${JSON.stringify(data)}`);
+        
+        updateStatus('✅ Подключение успешно!');
+        
     } catch (error) {
-        console.error("❌ Сетевая ошибка:", error.message);
+        log(`❌ Ошибка подключения: ${error.message}`, 'error');
+        updateStatus('❌ Ошибка подключения', true);
     }
 }
 
-// Тестируем подключение при загрузке
-window.addEventListener('load', testConnection);
+// Создание комнаты
+async function createRoom() {
+    try {
+        updateStatus('Создание комнаты...');
+        log('Отправляем запрос на создание комнаты...');
+        
+        const response = await fetch(API_URL + '/room', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: userId
+            })
+        });
+        
+        log(`Статус ответа: ${response.status} ${response.statusText}`);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        log(`Данные ответа: ${JSON.stringify(data)}`);
+        
+        if (data.success && data.roomId) {
+            updateStatus(`✅ Комната создана: ${data.roomId}`);
+            log(`ID комнаты: ${data.roomId}`);
+            
+            // Автоматически заполняем поле для входа
+            document.getElementById('roomInput').value = data.roomId;
+            
+            alert(`Комната создана!\nID: ${data.roomId}\nПоделитесь этим ID с другими участниками.`);
+        } else {
+            throw new Error('Неверный формат ответа');
+        }
+        
+    } catch (error) {
+        log(`❌ Ошибка создания комнаты: ${error.message}`, 'error');
+        updateStatus('❌ Ошибка создания комнаты', true);
+        alert(`Ошибка: ${error.message}`);
+    }
+}
+
+// Присоединение к комнате
+async function joinRoom() {
+    const roomId = document.getElementById('roomInput').value.trim().toUpperCase();
+    
+    if (!roomId) {
+        alert('Введите ID комнаты');
+        return;
+    }
+    
+    if (roomId.length !== 6) {
+        alert('ID комнаты должен состоять из 6 символов');
+        return;
+    }
+    
+    try {
+        updateStatus('Присоединение к комнате...');
+        log(`Присоединяемся к комнате ${roomId}...`);
+        
+        const response = await fetch(API_URL + `/room/${roomId}/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: userId
+            })
+        });
+        
+        log(`Статус ответа: ${response.status} ${response.statusText}`);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        log(`Данные ответа: ${JSON.stringify(data)}`);
+        
+        if (data.success) {
+            updateStatus(`✅ Присоединились к комнате ${roomId}`);
+            
+            // Запрашиваем доступ к микрофону
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: true 
+                });
+                log('✅ Доступ к микрофону получен');
+                
+                // Здесь будет логика WebRTC
+                alert('✅ Успешно присоединились к комнате!\n\nМикрофон доступен.\n\nСледующий шаг: подключение к другим участникам через WebRTC.');
+                
+            } catch (mediaError) {
+                log(`⚠️ Не удалось получить доступ к микрофону: ${mediaError.message}`, 'warning');
+                alert('✅ Успешно присоединились к комнате!\n\n⚠️ Для голосового общения разрешите доступ к микрофону.');
+            }
+        } else {
+            throw new Error(data.error || 'Ошибка присоединения');
+        }
+        
+    } catch (error) {
+        log(`❌ Ошибка присоединения: ${error.message}`, 'error');
+        updateStatus('❌ Ошибка присоединения', true);
+        alert(`Ошибка: ${error.message}`);
+    }
+}
+
+// Автоматический тест при загрузке
+window.addEventListener('load', () => {
+    log(`Инициализация... Пользователь: ${userId}`);
+    log(`API URL: ${API_URL}`);
+    testConnection();
+});
 </script>
 </body>
 </html>
