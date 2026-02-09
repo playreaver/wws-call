@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>WWS Call</title>
+<style>
+body { font-family: Arial; text-align:center; background:#111; color:white; }
+button { padding:10px 20px; margin:10px; }
+input { padding:10px; }
+</style>
+</head>
+<body>
+
+<h2>WWS Audio Call</h2>
+
+<button onclick="createRoom()">Создать комнату</button>
+<br><br>
+<input id="roomInput" placeholder="ID комнаты">
+<button onclick="joinRoom()">Войти</button>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "ТВОЙ_API_KEY",
+  databaseURL: "https://wws-id-default-rtdb.europe-west1.firebasedatabase.app"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
+
+let localStream;
+let peerConnections = {};
+let roomId;
+let userId = Math.random().toString(36).substring(7);
+
+async function createRoom() {
+  const res = await fetch(API_URL, {
+    method: "POST"
+  });
+  const data = await res.json();
+  alert("Комната создана: " + data.roomId);
+}
+
+async function joinRoom() {
+  roomId = document.getElementById("roomInput").value;
+  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+  db.ref("rooms/" + roomId + "/participants/" + userId).set({
+    joinedAt: Date.now()
+  });
+
+  listenForParticipants();
+}
+
+function listenForParticipants() {
+  db.ref("rooms/" + roomId + "/participants").on("value", snapshot => {
+    const participants = snapshot.val();
+    if (!participants) return;
+
+    Object.keys(participants).forEach(id => {
+      if (id !== userId && !peerConnections[id]) {
+        createPeerConnection(id);
+      }
+    });
+  });
+}
+
+function createPeerConnection(remoteId) {
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+
+  localStream.getTracks().forEach(track => {
+    pc.addTrack(track, localStream);
+  });
+
+  pc.ontrack = event => {
+    const audio = new Audio();
+    audio.srcObject = event.streams[0];
+    audio.play();
+  };
+
+  peerConnections[remoteId] = pc;
+}
+</script>
+</body>
+</html>
