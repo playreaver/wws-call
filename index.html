@@ -619,7 +619,7 @@
     <script>
         // Конфигурация
         const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
-
+        
         // WebRTC Configuration
         const config = {
             iceServers: [
@@ -633,7 +633,7 @@
                 }
             ]
         };
-
+        
         // Состояние приложения
         const state = {
             userId: null,
@@ -642,17 +642,20 @@
             roomOwner: false,
             localStream: null,
             peerConnections: {},
-            audioAnalyzers: {},
             isMuted: true,
             isSpeaker: false,
             signalInterval: null,
             updateInterval: null,
-            participants: []
+            participants: [],
+            pendingCandidates: {}, // Для хранения кандидатов до установки remoteDescription
+            audioContext: null,
+            audioAnalyzers: {},
+            connectionAttempts: {} // Счетчик попыток подключения
         };
-
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', init);
-
+        
         async function init() {
             // Генерация ID и имени
             state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -664,7 +667,7 @@
                 document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
                 return;
             }
-
+        
             // Проверка подключения
             await checkConnection();
             
@@ -673,7 +676,7 @@
                 document.getElementById('loading').style.display = 'none';
             }, 1000);
         }
-
+        
         function generateName() {
             const names = [
                 'Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 
@@ -690,11 +693,11 @@
             
             return `${name} ${surname}`;
         }
-
+        
         function checkSupport() {
             return 'RTCPeerConnection' in window && 'getUserMedia' in navigator.mediaDevices;
         }
-
+        
         async function checkConnection() {
             try {
                 const response = await fetch(API_URL, {
@@ -710,9 +713,11 @@
                 return false;
             }
         }
-
+        
         function updateConnectionStatus(connected) {
             const status = document.getElementById('connectionStatus');
+            if (!status) return;
+            
             const dot = status.querySelector('.connection-dot');
             const text = status.querySelector('span');
             
@@ -720,16 +725,18 @@
             dot.className = connected ? 'connection-dot connected' : 'connection-dot disconnected';
             text.textContent = connected ? 'Подключено' : 'Отключено';
         }
-
+        
         // Навигация
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
         }
-
+        
         // Уведомления
         function showToast(message, duration = 3000) {
             const toast = document.getElementById('toast');
+            if (!toast) return;
+            
             toast.textContent = message;
             toast.classList.add('show');
             
@@ -737,12 +744,23 @@
                 toast.classList.remove('show');
             }, duration);
         }
-
+        
         // Создание комнаты
         async function createRoom() {
             showLoading('Создание звонка...');
             
             try {
+                // Сначала запрашиваем доступ к микрофону
+                if (!state.localStream) {
+                    try {
+                        await requestMicrophonePermission();
+                    } catch (error) {
+                        showToast('Не удалось получить доступ к микрофону. Проверьте разрешения.');
+                        hideLoading();
+                        return;
+                    }
+                }
+                
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -752,7 +770,7 @@
                         userName: state.userName 
                     })
                 });
-
+        
                 const data = await response.json();
                 
                 if (data.success) {
@@ -770,7 +788,7 @@
                 hideLoading();
             }
         }
-
+        
         // Присоединение к комнате
         async function joinRoom() {
             const code = document.getElementById('roomCode').value.trim().toUpperCase();
@@ -779,10 +797,21 @@
                 showToast('Введите 6-значный код звонка');
                 return;
             }
-
+        
             showLoading('Присоединение...');
             
             try {
+                // Сначала запрашиваем доступ к микрофону
+                if (!state.localStream) {
+                    try {
+                        await requestMicrophonePermission();
+                    } catch (error) {
+                        showToast('Не удалось получить доступ к микрофону. Проверьте разрешения.');
+                        hideLoading();
+                        return;
+                    }
+                }
+                
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -793,7 +822,7 @@
                         userName: state.userName 
                     })
                 });
-
+        
                 const data = await response.json();
                 
                 if (data.success) {
@@ -811,13 +840,44 @@
                 hideLoading();
             }
         }
-
+        
+        // Запрос доступа к микрофону с обработкой ошибок
+        async function requestMicrophonePermission() {
+            try {
+                state.localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        channelCount: 2
+                    }
+                });
+                
+                // Включаем микрофон по умолчанию
+                toggleMic();
+                
+                return state.localStream;
+            } catch (error) {
+                console.error('Microphone permission error:', error);
+                
+                // Показываем понятное сообщение об ошибке
+                let errorMessage = 'Ошибка доступа к микрофону';
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Доступ к микрофону отклонен. Разрешите доступ в настройках браузера.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'Микрофон не найден. Убедитесь, что микрофон подключен.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'Микрофон уже используется другим приложением.';
+                }
+                
+                showToast(errorMessage, 5000);
+                throw error;
+            }
+        }
+        
         // Начало звонка
         async function startCall() {
             try {
-                // Получаем доступ к микрофону
-                await getAudioStream();
-                
                 // Показываем экран звонка
                 showScreen('callScreen');
                 document.getElementById('currentRoomCode').textContent = state.roomId;
@@ -836,13 +896,16 @@
                 // Обновляем список участников
                 await updateParticipants();
                 
+                // Подключаемся ко всем существующим участникам
+                connectToAllParticipants();
+                
             } catch (error) {
-                showToast('Ошибка доступа к микрофону');
+                showToast('Ошибка начала звонка: ' + error.message);
                 console.error('Start call error:', error);
                 showScreen('homeScreen');
             }
         }
-
+        
         function updateShareButton() {
             const shareBtn = document.getElementById('shareBtn');
             if (navigator.share) {
@@ -852,52 +915,50 @@
                 shareBtn.style.display = 'none';
             }
         }
-
-        // Получение аудио потока
-        async function getAudioStream() {
-            try {
-                state.localStream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        channelCount: 2
-                    }
-                });
-                
-                // Включаем микрофон по умолчанию
-                toggleMic();
-                
-            } catch (error) {
-                throw error;
-            }
-        }
-
+        
         // Управление микрофоном
         function toggleMic() {
-            if (!state.localStream) return;
+            if (!state.localStream) {
+                // Пытаемся получить доступ к микрофону
+                requestMicrophonePermission().then(() => {
+                    // После получения доступа включаем микрофон
+                    state.isMuted = false;
+                    updateMicUI();
+                    showToast('Микрофон включен', 1500);
+                }).catch(error => {
+                    showToast('Не удалось получить доступ к микрофону');
+                });
+                return;
+            }
             
             state.isMuted = !state.isMuted;
             state.localStream.getAudioTracks().forEach(track => {
                 track.enabled = !state.isMuted;
             });
             
+            updateMicUI();
+            showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
+        }
+        
+        function updateMicUI() {
             const btn = document.getElementById('muteBtn');
+            if (!btn) return;
+            
             btn.classList.toggle('active', state.isMuted);
             btn.innerHTML = state.isMuted ? 
                 '<i class="fas fa-microphone-slash"></i>' : 
                 '<i class="fas fa-microphone"></i>';
             
             btn.title = state.isMuted ? 'Включить микрофон' : 'Выключить микрофон';
-            
-            showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
         }
-
+        
         // Управление динамиком (только мобильные)
         function toggleSpeaker() {
             state.isSpeaker = !state.isSpeaker;
             
             const btn = document.getElementById('speakerBtn');
+            if (!btn) return;
+            
             btn.classList.toggle('active', state.isSpeaker);
             
             // На мобильных - переключаем на основной динамик
@@ -909,7 +970,7 @@
             
             showToast(state.isSpeaker ? 'Основной динамик' : 'Стандартный', 1500);
         }
-
+        
         // Копирование кода комнаты
         async function copyRoomCode() {
             if (!state.roomId) return;
@@ -928,7 +989,7 @@
                 showToast('Код скопирован');
             }
         }
-
+        
         // Поделиться кодом (только мобильные)
         async function shareRoomCode() {
             if (!state.roomId) return;
@@ -949,9 +1010,13 @@
                 copyRoomCode();
             }
         }
-
+        
         // Запуск обновлений
         function startUpdates() {
+            // Очищаем предыдущие интервалы
+            if (state.updateInterval) clearInterval(state.updateInterval);
+            if (state.signalInterval) clearInterval(state.signalInterval);
+            
             // Обновление списка участников каждые 3 секунды
             state.updateInterval = setInterval(updateParticipants, 3000);
             
@@ -961,7 +1026,7 @@
             // Проверка подключения каждые 30 секунд
             setInterval(checkConnection, 30000);
         }
-
+        
         // Обновление списка участников
         async function updateParticipants() {
             if (!state.roomId) return;
@@ -976,37 +1041,33 @@
                         userId: state.userId 
                     })
                 });
-
+        
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
                         state.participants = data.participants || [];
                         renderParticipants();
-                        
-                        // Авто-подключение к новым участникам
-                        connectToNewParticipants();
                     }
                 }
             } catch (error) {
                 console.error('Update participants error:', error);
             }
         }
-
-        // Подключение к новым участникам
-        function connectToNewParticipants() {
+        
+        // Подключение ко всем участникам
+        function connectToAllParticipants() {
             state.participants.forEach(p => {
                 if (p.id !== state.userId && !state.peerConnections[p.id]) {
-                    // Сравниваем ID - только пользователь с меньшим ID инициирует соединение
-                    if (state.userId < p.id) {
-                        createPeerConnection(p.id);
-                    }
+                    createPeerConnection(p.id);
                 }
             });
         }
-
+        
         // Отрисовка участников
         function renderParticipants() {
             const container = document.getElementById('participantsView');
+            if (!container) return;
+            
             container.innerHTML = '';
             
             // Сортируем: сначала создатель, потом говорящие, потом остальные
@@ -1028,7 +1089,7 @@
                 container.appendChild(card);
             });
         }
-
+        
         function createParticipantCard(participant) {
             const isMe = participant.id === state.userId;
             const isOwner = participant.isOwner;
@@ -1065,7 +1126,7 @@
             
             return card;
         }
-
+        
         function getInitials(name) {
             const words = name.split(' ');
             if (words.length >= 2) {
@@ -1073,7 +1134,7 @@
             }
             return name.substring(0, 2).toUpperCase();
         }
-
+        
         function getColor(id) {
             const colors = [
                 '#667eea', '#764ba2', '#f093fb', '#f5576c',
@@ -1085,7 +1146,7 @@
             }
             return colors[Math.abs(hash) % colors.length];
         }
-
+        
         // Управление участниками
         async function kickParticipant(participantId) {
             if (!confirm('Удалить участника из звонка?')) return;
@@ -1111,12 +1172,24 @@
                 showToast('Ошибка удаления');
             }
         }
-
+        
         // WebRTC соединения
         async function createPeerConnection(peerId) {
             if (state.peerConnections[peerId]) return;
             
             console.log(`Creating peer connection to ${peerId}`);
+            
+            // Ограничиваем количество попыток подключения
+            if (!state.connectionAttempts[peerId]) {
+                state.connectionAttempts[peerId] = 0;
+            }
+            
+            if (state.connectionAttempts[peerId] > 3) {
+                console.log(`Too many connection attempts to ${peerId}, skipping`);
+                return;
+            }
+            
+            state.connectionAttempts[peerId]++;
             
             try {
                 const pc = new RTCPeerConnection(config);
@@ -1125,14 +1198,18 @@
                 // Добавляем локальный поток
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => {
-                        pc.addTrack(track, state.localStream);
+                        try {
+                            pc.addTrack(track, state.localStream);
+                        } catch (error) {
+                            console.error('Error adding track:', error);
+                        }
                     });
                 }
                 
                 // Обработчики событий
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
-                        console.log(`ICE candidate for ${peerId}:`, e.candidate);
+                        console.log(`ICE candidate for ${peerId}:`, e.candidate.type);
                         sendSignal(peerId, 'candidate', e.candidate);
                     }
                 };
@@ -1144,23 +1221,49 @@
                 
                 pc.oniceconnectionstatechange = () => {
                     console.log(`ICE state for ${peerId}:`, pc.iceConnectionState);
-                    if (pc.iceConnectionState === 'disconnected' || 
-                        pc.iceConnectionState === 'failed' ||
-                        pc.iceConnectionState === 'closed') {
-                        cleanupPeerConnection(peerId);
+                    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                        console.log(`✅ Connected to ${peerId}`);
+                        state.connectionAttempts[peerId] = 0; // Сброс счетчика при успешном подключении
+                    } else if (pc.iceConnectionState === 'disconnected' || 
+                               pc.iceConnectionState === 'failed' ||
+                               pc.iceConnectionState === 'closed') {
+                        console.log(`❌ Disconnected from ${peerId}`);
+                        // Не очищаем сразу, даем шанс на переподключение
+                        setTimeout(() => {
+                            if (pc.iceConnectionState !== 'connected' && 
+                                pc.iceConnectionState !== 'checking') {
+                                cleanupPeerConnection(peerId);
+                            }
+                        }, 5000);
                     }
                 };
                 
                 // Создаем предложение только если мы инициатор (userId < peerId)
                 if (state.userId < peerId) {
                     try {
-                        const offer = await pc.createOffer();
+                        const offer = await pc.createOffer({
+                            offerToReceiveAudio: true,
+                            offerToReceiveVideo: false
+                        });
+                        
                         await pc.setLocalDescription(offer);
-                        console.log(`Created offer for ${peerId}:`, offer);
+                        console.log(`Created offer for ${peerId}`);
                         await sendSignal(peerId, 'offer', offer);
                     } catch (error) {
                         console.error('Create offer error:', error);
                     }
+                }
+                
+                // Обрабатываем ожидающие кандидаты
+                if (state.pendingCandidates[peerId]) {
+                    state.pendingCandidates[peerId].forEach(candidate => {
+                        try {
+                            pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch (error) {
+                            console.error('Error adding pending candidate:', error);
+                        }
+                    });
+                    delete state.pendingCandidates[peerId];
                 }
                 
             } catch (error) {
@@ -1168,7 +1271,7 @@
                 cleanupPeerConnection(peerId);
             }
         }
-
+        
         function handleRemoteTrack(event, peerId) {
             console.log(`Setting up remote track for ${peerId}`);
             
@@ -1194,21 +1297,28 @@
                 setupSpeechDetector(audio, peerId);
             }
             
-            document.getElementById('audioContainer').appendChild(audio);
+            // Добавляем в контейнер
+            const container = document.getElementById('audioContainer');
+            if (container) {
+                container.appendChild(audio);
+            } else {
+                document.body.appendChild(audio);
+            }
         }
-
+        
         function setupSpeechDetector(audio, peerId) {
             if (!window.AudioContext) return;
             
-            // Ждем пока аудио будет готово
             audio.oncanplay = () => {
                 try {
-                    const audioContext = new AudioContext();
-                    const analyser = audioContext.createAnalyser();
+                    if (!state.audioContext) {
+                        state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
                     
-                    // Проверяем что srcObject существует и это MediaStream
+                    const analyser = state.audioContext.createAnalyser();
+                    
                     if (audio.srcObject && audio.srcObject instanceof MediaStream) {
-                        const source = audioContext.createMediaStreamSource(audio.srcObject);
+                        const source = state.audioContext.createMediaStreamSource(audio.srcObject);
                         source.connect(analyser);
                         
                         analyser.fftSize = 256;
@@ -1216,17 +1326,19 @@
                         const data = new Uint8Array(analyser.frequencyBinCount);
                         
                         let speakingTimeout = null;
+                        let lastSpeakingState = false;
                         
                         function detect() {
+                            if (!state.audioAnalyzers[peerId]) return;
+                            
                             analyser.getByteFrequencyData(data);
                             const average = data.reduce((a, b) => a + b) / data.length;
-                            const isSpeaking = average > 15;
+                            const isSpeaking = average > 20;
                             
-                            if (isSpeaking !== state.audioAnalyzers[peerId]?.speaking) {
-                                state.audioAnalyzers[peerId] = {
-                                    speaking: isSpeaking,
-                                    lastUpdate: Date.now()
-                                };
+                            if (isSpeaking !== lastSpeakingState) {
+                                lastSpeakingState = isSpeaking;
+                                state.audioAnalyzers[peerId].speaking = isSpeaking;
+                                state.audioAnalyzers[peerId].lastUpdate = Date.now();
                                 
                                 // Обновляем UI
                                 if (isSpeaking) {
@@ -1239,8 +1351,17 @@
                                 }
                             }
                             
-                            requestAnimationFrame(detect);
+                            if (state.audioAnalyzers[peerId]) {
+                                requestAnimationFrame(detect);
+                            }
                         }
+                        
+                        state.audioAnalyzers[peerId] = {
+                            analyser: analyser,
+                            speaking: false,
+                            lastUpdate: Date.now(),
+                            detect: detect
+                        };
                         
                         detect();
                     }
@@ -1249,21 +1370,23 @@
                 }
             };
         }
-
+        
         function cleanupPeerConnection(peerId) {
             if (state.peerConnections[peerId]) {
                 state.peerConnections[peerId].close();
                 delete state.peerConnections[peerId];
             }
             
-            delete state.audioAnalyzers[peerId];
+            if (state.audioAnalyzers[peerId]) {
+                delete state.audioAnalyzers[peerId];
+            }
             
             const audio = document.getElementById(`audio_${peerId}`);
             if (audio) {
                 audio.remove();
             }
         }
-
+        
         // Получение сигналов
         async function pollSignals() {
             if (!state.roomId) return;
@@ -1276,10 +1399,10 @@
                         action: 'getSignals',
                         roomId: state.roomId,
                         userId: state.userId,
-                        timestamp: Date.now() - 5000
+                        timestamp: Date.now() - 10000 // 10 секунд
                     })
                 });
-
+        
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success && data.signals) {
@@ -1292,7 +1415,7 @@
                 console.error('Signal polling error:', error);
             }
         }
-
+        
         async function handleSignal(signal) {
             if (signal.from === state.userId) return;
             
@@ -1312,8 +1435,10 @@
                 console.error('Handle signal error:', error);
             }
         }
-
+        
         async function sendSignal(to, type, data) {
+            if (!state.roomId) return;
+            
             try {
                 await fetch(API_URL, {
                     method: 'POST',
@@ -1329,7 +1454,7 @@
                 console.error('Send signal error:', error);
             }
         }
-
+        
         // Обработка предложения
         async function handleOffer(peerId, offer) {
             console.log(`Received offer from ${peerId}`);
@@ -1354,25 +1479,34 @@
                 // Добавляем локальный поток
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => {
-                        pc.addTrack(track, state.localStream);
+                        try {
+                            pc.addTrack(track, state.localStream);
+                        } catch (error) {
+                            console.error('Error adding track in handleOffer:', error);
+                        }
                     });
                 }
             }
             
             // Проверяем текущее состояние
             if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                await sendSignal(peerId, 'answer', answer);
-                
-                console.log(`Sent answer to ${peerId}`);
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    console.log(`Set remote description from ${peerId}`);
+                    
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    await sendSignal(peerId, 'answer', answer);
+                    
+                    console.log(`Sent answer to ${peerId}`);
+                } catch (error) {
+                    console.error('Error handling offer:', error);
+                }
             } else {
                 console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
             }
         }
-
+        
         // Обработка ответа
         async function handleAnswer(peerId, answer) {
             console.log(`Received answer from ${peerId}`);
@@ -1385,20 +1519,32 @@
             
             // Проверяем что мы в правильном состоянии
             if (pc.signalingState === 'have-local-offer') {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                console.log(`Set remote description from ${peerId}`);
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    console.log(`Set remote description from ${peerId}`);
+                } catch (error) {
+                    console.error('Error setting remote description:', error);
+                }
+            } else if (pc.signalingState === 'stable') {
+                console.log(`Already in stable state, ignoring answer from ${peerId}`);
             } else {
                 console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
             }
         }
-
+        
         // Обработка кандидата
         async function handleCandidate(peerId, candidate) {
             console.log(`Received candidate from ${peerId}`);
             
             const pc = state.peerConnections[peerId];
             if (!pc) {
-                console.warn(`No peer connection for ${peerId}`);
+                console.warn(`No peer connection for ${peerId}, caching candidate`);
+                
+                // Кэшируем кандидата для будущего подключения
+                if (!state.pendingCandidates[peerId]) {
+                    state.pendingCandidates[peerId] = [];
+                }
+                state.pendingCandidates[peerId].push(candidate);
                 return;
             }
             
@@ -1407,14 +1553,21 @@
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                 } catch (error) {
-                    console.error('Add ICE candidate error:', error);
+                    // Игнорируем ошибки добавления кандидатов (часто они не важны)
+                    if (!error.message.includes('already has an ICE candidate')) {
+                        console.warn('Add ICE candidate warning:', error.message);
+                    }
                 }
             } else {
-                console.warn('Remote description not set yet, caching candidate');
-                // Можно кэшировать кандидатов и добавить позже
+                console.log('Remote description not set yet, caching candidate');
+                // Кэшируем кандидата
+                if (!state.pendingCandidates[peerId]) {
+                    state.pendingCandidates[peerId] = [];
+                }
+                state.pendingCandidates[peerId].push(candidate);
             }
         }
-
+        
         // Выход из звонка
         async function leaveRoom() {
             if (!confirm('Завершить звонок?')) return;
@@ -1443,7 +1596,7 @@
             showScreen('homeScreen');
             document.getElementById('roomCode').value = '';
         }
-
+        
         function cleanup() {
             // Очистка интервалов
             if (state.updateInterval) clearInterval(state.updateInterval);
@@ -1464,25 +1617,48 @@
             }
             
             // Очистка аудио элементов
-            document.getElementById('audioContainer').innerHTML = '';
+            const container = document.getElementById('audioContainer');
+            if (container) {
+                container.innerHTML = '';
+            } else {
+                document.querySelectorAll('[id^="audio_"]').forEach(el => el.remove());
+            }
+            
+            // Закрытие аудио контекста
+            if (state.audioContext) {
+                state.audioContext.close();
+                state.audioContext = null;
+            }
             
             // Сброс состояния
             state.roomId = null;
             state.roomOwner = false;
             state.audioAnalyzers = {};
             state.participants = [];
+            state.pendingCandidates = {};
+            state.connectionAttempts = {};
         }
-
+        
         // Утилиты
         function showLoading(text = 'Загрузка...') {
-            document.getElementById('loading').style.display = 'flex';
-            document.getElementById('loadingText').textContent = text;
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.style.display = 'flex';
+            }
+            
+            const loadingText = document.getElementById('loadingText');
+            if (loadingText) {
+                loadingText.textContent = text;
+            }
         }
-
+        
         function hideLoading() {
-            document.getElementById('loading').style.display = 'none';
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.style.display = 'none';
+            }
         }
-
+        
         // Горячие клавиши
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && state.roomId) {
@@ -1497,15 +1673,18 @@
                 e.preventDefault();
             }
         });
-
+        
         // Обработка ввода кода
-        document.getElementById('roomCode').addEventListener('input', function(e) {
-            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (this.value.length > 6) {
-                this.value = this.value.substring(0, 6);
-            }
-        });
-
+        const roomCodeInput = document.getElementById('roomCode');
+        if (roomCodeInput) {
+            roomCodeInput.addEventListener('input', function(e) {
+                this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (this.value.length > 6) {
+                    this.value = this.value.substring(0, 6);
+                }
+            });
+        }
+        
         // Предотвращение выключения экрана во время звонка
         if ('wakeLock' in navigator) {
             let wakeLock = null;
@@ -1537,7 +1716,7 @@
             // Освобождение при выходе
             window.addEventListener('beforeunload', releaseWakeLock);
         }
-
+        
         // PWA установка
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
