@@ -88,10 +88,8 @@ input {
 const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
 let userId = 'user_' + Math.random().toString(36).substring(2, 9);
 
-// Отображение API URL
 document.getElementById('apiUrl').textContent = API_URL;
 
-// Логирование
 function log(message, type = 'info') {
     const logElement = document.getElementById('log');
     const timestamp = new Date().toLocaleTimeString();
@@ -100,91 +98,67 @@ function log(message, type = 'info') {
     logElement.scrollTop = logElement.scrollHeight;
 }
 
-// Обновление статуса
 function updateStatus(message, isError = false) {
     const statusElement = document.getElementById('statusText');
     statusElement.textContent = message;
     statusElement.style.color = isError ? '#f00' : '#0f0';
 }
 
-// Тест подключения
+// ----------------- Тест подключения -----------------
 async function testConnection() {
     try {
         updateStatus('Тестируем подключение...');
-        log('Отправляем OPTIONS запрос для проверки CORS...');
-        
-        // Проверяем OPTIONS запрос
-        const optionsResponse = await fetch(API_URL + '/health', {
-            method: 'OPTIONS'
-        });
-        
-        log(`OPTIONS ответ: ${optionsResponse.status} ${optionsResponse.statusText}`);
-        
-        if (!optionsResponse.ok) {
-            throw new Error(`OPTIONS failed: ${optionsResponse.status}`);
-        }
-        
-        // Проверяем GET запрос
         log('Отправляем GET запрос для проверки сервера...');
-        const getResponse = await fetch(API_URL + '/health', {
-            method: 'GET'
+
+        const response = await fetch(API_URL, {
+            method: 'POST', // используем POST с body {action: 'ping'}
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: 'ping' })
         });
-        
-        log(`GET ответ: ${getResponse.status} ${getResponse.statusText}`);
-        
-        if (!getResponse.ok) {
-            throw new Error(`GET failed: ${getResponse.status}`);
-        }
-        
-        const data = await getResponse.json();
+
+        log(`Статус ответа: ${response.status} ${response.statusText}`);
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
         log(`Данные ответа: ${JSON.stringify(data)}`);
-        
         updateStatus('✅ Подключение успешно!');
-        
     } catch (error) {
         log(`❌ Ошибка подключения: ${error.message}`, 'error');
         updateStatus('❌ Ошибка подключения', true);
     }
 }
 
-// Создание комнаты
+// ----------------- Создание комнаты -----------------
 async function createRoom() {
     try {
         updateStatus('Создание комнаты...');
         log('Отправляем запрос на создание комнаты...');
-        
-        const response = await fetch(API_URL + '/room', {
+
+        const response = await fetch(API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                action: 'createRoom',
                 userId: userId
             })
         });
-        
+
         log(`Статус ответа: ${response.status} ${response.statusText}`);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
         const data = await response.json();
         log(`Данные ответа: ${JSON.stringify(data)}`);
-        
+
         if (data.success && data.roomId) {
             updateStatus(`✅ Комната создана: ${data.roomId}`);
-            log(`ID комнаты: ${data.roomId}`);
-            
-            // Автоматически заполняем поле для входа
             document.getElementById('roomInput').value = data.roomId;
-            
             alert(`Комната создана!\nID: ${data.roomId}\nПоделитесь этим ID с другими участниками.`);
         } else {
-            throw new Error('Неверный формат ответа');
+            throw new Error(data.error || 'Неверный формат ответа');
         }
-        
     } catch (error) {
         log(`❌ Ошибка создания комнаты: ${error.message}`, 'error');
         updateStatus('❌ Ошибка создания комнаты', true);
@@ -192,65 +166,46 @@ async function createRoom() {
     }
 }
 
-// Присоединение к комнате
+// ----------------- Присоединение к комнате -----------------
 async function joinRoom() {
     const roomId = document.getElementById('roomInput').value.trim().toUpperCase();
-    
-    if (!roomId) {
-        alert('Введите ID комнаты');
-        return;
-    }
-    
-    if (roomId.length !== 6) {
-        alert('ID комнаты должен состоять из 6 символов');
-        return;
-    }
-    
+    if (!roomId) return alert('Введите ID комнаты');
+    if (roomId.length !== 6) return alert('ID комнаты должен состоять из 6 символов');
+
     try {
         updateStatus('Присоединение к комнате...');
         log(`Присоединяемся к комнате ${roomId}...`);
-        
-        const response = await fetch(API_URL + `/room/${roomId}/join`, {
+
+        const response = await fetch(API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                action: 'joinRoom',
+                roomId: roomId,
                 userId: userId
             })
         });
-        
+
         log(`Статус ответа: ${response.status} ${response.statusText}`);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
         const data = await response.json();
         log(`Данные ответа: ${JSON.stringify(data)}`);
-        
+
         if (data.success) {
             updateStatus(`✅ Присоединились к комнате ${roomId}`);
-            
-            // Запрашиваем доступ к микрофону
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: true 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 log('✅ Доступ к микрофону получен');
-                
-                // Здесь будет логика WebRTC
-                alert('✅ Успешно присоединились к комнате!\n\nМикрофон доступен.\n\nСледующий шаг: подключение к другим участникам через WebRTC.');
-                
+                alert('✅ Успешно присоединились к комнате!\nМикрофон доступен.');
             } catch (mediaError) {
                 log(`⚠️ Не удалось получить доступ к микрофону: ${mediaError.message}`, 'warning');
-                alert('✅ Успешно присоединились к комнате!\n\n⚠️ Для голосового общения разрешите доступ к микрофону.');
+                alert('✅ Присоединились к комнате!\n⚠️ Разрешите доступ к микрофону для голосового общения.');
             }
         } else {
             throw new Error(data.error || 'Ошибка присоединения');
         }
-        
+
     } catch (error) {
         log(`❌ Ошибка присоединения: ${error.message}`, 'error');
         updateStatus('❌ Ошибка присоединения', true);
@@ -258,7 +213,7 @@ async function joinRoom() {
     }
 }
 
-// Автоматический тест при загрузке
+// ----------------- Инициализация -----------------
 window.addEventListener('load', () => {
     log(`Инициализация... Пользователь: ${userId}`);
     log(`API URL: ${API_URL}`);
@@ -267,3 +222,4 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
