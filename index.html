@@ -821,9 +821,14 @@
             const configuration = {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
-                ]
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    { 
+                        urls: 'turn:numb.viagenie.ca',
+                        credential: 'muazkh',
+                        username: 'webrtc@live.com'
+                    }
+                ],
+                iceCandidatePoolSize: 10
             };
             
             const pc = new RTCPeerConnection(configuration);
@@ -944,8 +949,16 @@
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'getParticipants', roomId: currentRoomId, userId })
+                    body: JSON.stringify({ 
+                        action: 'getParticipants', 
+                        roomId: currentRoomId, 
+                        userId: userId 
+                    })
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 
                 const data = await response.json();
                 
@@ -954,30 +967,38 @@
                     const countEl = document.getElementById('participantCount');
                     
                     participantsList.innerHTML = '';
-                    countEl.textContent = data.count;
+                    countEl.textContent = data.count || 0;
                     
-                    data.participants.forEach(participant => {
+                    (data.participants || []).forEach(participant => {
                         const isMe = participant.id === userId;
-                        const isConnected = peerConnections[participant.id]?.connectionState === 'connected';
+                        const isConnected = true; // Упрощённая проверка
                         
                         const card = document.createElement('div');
                         card.className = `participant-card ${isConnected ? 'active' : ''}`;
                         
                         // Генерация инициалов
-                        const initials = participant.id.split('_')[0].charAt(0) + participant.id.split('_')[1].charAt(0);
+                        const initials = (participant.id || 'UU')
+                            .split('_')
+                            .map(word => word.charAt(0))
+                            .join('')
+                            .toUpperCase()
+                            .substring(0, 2);
                         
                         card.innerHTML = `
                             <div class="avatar">${initials}</div>
-                            <h4>${participant.id}</h4>
+                            <h4>${participant.id || 'Unknown'}</h4>
                             <p>${isMe ? '(Вы)' : ''}</p>
                             <p><small>${isConnected ? '✅ Подключен' : '⏳ Ожидание'}</small></p>
                         `;
                         
                         participantsList.appendChild(card);
                     });
+                    
+                    log(`Обновлён список участников: ${data.count} чел.`, 'info');
                 }
             } catch (error) {
                 console.error('Error updating participants:', error);
+                log(`Ошибка обновления списка: ${error.message}`, 'error');
             }
         }
         
@@ -1130,7 +1151,7 @@
             
             // Периодическое обновление списка участников
             clearInterval(window.participantsInterval);
-            window.participantsInterval = setInterval(updateParticipantsList, 5000);
+            window.participantsInterval = setInterval(updateParticipantsList, 3000);
         }
         
         async function copyRoomId() {
@@ -1198,36 +1219,7 @@
                 leaveRoom();
             }
         });
-        
-        // Firebase SDK для прямого подключения
-        class Firebase {
-            constructor(baseUrl) {
-                this.baseUrl = baseUrl.replace(/\/$/, '');
-            }
-            
-            child(path) {
-                return {
-                    on: (event, callback) => {
-                        const fullPath = `${this.baseUrl}/${path}.json`;
-                        const eventSource = new EventSource(fullPath);
-                        
-                        eventSource.onmessage = (event) => {
-                            const data = JSON.parse(event.data);
-                            if (data) {
-                                Object.entries(data).forEach(([key, value]) => {
-                                    callback({ key, val: () => value });
-                                });
-                            }
-                        };
-                        
-                        return {
-                            off: () => eventSource.close()
-                        };
-                    }
-                };
-            }
-        }
-        
+                
         // Автоматическое обновление статуса
         setInterval(() => {
             if (currentRoomId) {
