@@ -1,1 +1,751 @@
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WWS Audio Call - Firebase Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(25, 25, 40, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(74, 144, 226, 0.3);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #4a90e2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .header h1 i {
+            font-size: 32px;
+        }
+        
+        .status-panel {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #4a90e2;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        .status-value {
+            font-weight: 500;
+        }
+        
+        .status-good {
+            color: #2ecc71;
+        }
+        
+        .status-bad {
+            color: #e74c3c;
+        }
+        
+        .control-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .control-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .control-section h3 {
+            color: #4a90e2;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4a90e2 0%, #357ae8 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(74, 144, 226, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+        
+        .input-group {
+            margin: 15px 0;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+        }
+        
+        .log-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .log-header h3 {
+            color: #4a90e2;
+            font-size: 18px;
+        }
+        
+        .log-content {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding-left: 10px;
+            border-left: 3px solid transparent;
+        }
+        
+        .log-info {
+            border-left-color: #3498db;
+            color: #3498db;
+        }
+        
+        .log-success {
+            border-left-color: #2ecc71;
+            color: #2ecc71;
+        }
+        
+        .log-warning {
+            border-left-color: #f39c12;
+            color: #f39c12;
+        }
+        
+        .log-error {
+            border-left-color: #e74c3c;
+            color: #e74c3c;
+        }
+        
+        .timestamp {
+            color: #777;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+        
+        .room-id-display {
+            background: rgba(74, 144, 226, 0.1);
+            border: 2px dashed #4a90e2;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .room-id-display h3 {
+            color: #4a90e2;
+            margin-bottom: 10px;
+        }
+        
+        .room-id {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 5px;
+            color: #2ecc71;
+            font-family: monospace;
+            text-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+        }
+        
+        .audio-controls {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .audio-controls h3 {
+            color: #4a90e2;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .audio-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e74c3c;
+        }
+        
+        .indicator.active {
+            background: #2ecc71;
+            box-shadow: 0 0 10px #2ecc71;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .badge-success {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+        }
+        
+        .badge-error {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+        }
+        
+        .badge-warning {
+            background: rgba(243, 156, 18, 0.2);
+            color: #f39c12;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .control-panel {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 22px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-phone-alt"></i> WWS Audio Call System</h1>
+            <p>Firebase + Яндекс.Облако - Тест подключения</p>
+        </div>
+        
+        <div class="status-panel">
+            <div class="status-item">
+                <span class="status-label">API Endpoint:</span>
+                <span class="status-value" id="apiEndpoint">Загрузка...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Статус Firebase:</span>
+                <span class="status-value" id="firebaseStatus">Проверка...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Пользователь ID:</span>
+                <span class="status-value" id="userId">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Текущая комната:</span>
+                <span class="status-value" id="currentRoom">Не выбрана</span>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <div class="control-section">
+                <h3><i class="fas fa-plug"></i> Подключение</h3>
+                <button class="btn" onclick="testConnection()">
+                    <i class="fas fa-wifi"></i> Проверить подключение
+                </button>
+                <button class="btn btn-success" onclick="createRoom()">
+                    <i class="fas fa-plus-circle"></i> Создать комнату
+                </button>
+            </div>
+            
+            <div class="control-section">
+                <h3><i class="fas fa-door-open"></i> Присоединиться</h3>
+                <div class="input-group">
+                    <label for="roomIdInput">ID комнаты (6 символов):</label>
+                    <input type="text" id="roomIdInput" placeholder="Введите ABC123" maxlength="6">
+                </div>
+                <button class="btn" onclick="joinRoom()">
+                    <i class="fas fa-sign-in-alt"></i> Войти в комнату
+                </button>
+            </div>
+        </div>
+        
+        <div class="room-id-display" id="roomDisplay" style="display: none;">
+            <h3><i class="fas fa-video"></i> Текущая комната</h3>
+            <div class="room-id" id="currentRoomId">-</div>
+            <p style="margin-top: 10px; color: #aaa;">
+                Поделитесь этим ID с другими участниками
+            </p>
+            <button class="btn" onclick="copyRoomId()" style="margin-top: 15px; width: auto;">
+                <i class="fas fa-copy"></i> Скопировать ID
+            </button>
+        </div>
+        
+        <div class="audio-controls">
+            <h3><i class="fas fa-microphone"></i> Аудио контроль</h3>
+            <div class="audio-status">
+                <div class="indicator" id="audioIndicator"></div>
+                <span id="audioStatus">Микрофон не активирован</span>
+            </div>
+            <button class="btn" onclick="toggleMicrophone()" id="micButton">
+                <i class="fas fa-microphone"></i> Включить микрофон
+            </button>
+        </div>
+        
+        <div class="log-container">
+            <div class="log-header">
+                <h3><i class="fas fa-terminal"></i> Лог событий</h3>
+                <button class="btn btn-danger" onclick="clearLog()" style="width: auto; padding: 8px 15px;">
+                    <i class="fas fa-trash"></i> Очистить
+                </button>
+            </div>
+            <div class="log-content" id="logContent">
+                <!-- Лог будет добавляться сюда -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Конфигурация
+        const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
+        let userId = 'user_' + Math.random().toString(36).substring(2, 9).toUpperCase();
+        let currentRoomId = null;
+        let localStream = null;
+        let isMicActive = false;
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('apiEndpoint').textContent = API_URL;
+            document.getElementById('userId').textContent = userId;
+            updateFirebaseStatus('Инициализация...');
+            
+            logMessage('Система инициализирована', 'info');
+            logMessage(`Пользователь: ${userId}`, 'info');
+            logMessage(`API: ${API_URL}`, 'info');
+            
+            // Автоматический тест подключения
+            setTimeout(() => testConnection(), 1000);
+        });
+        
+        // Функции логирования
+        function logMessage(message, type = 'info') {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                ${message}
+            `;
+            
+            logContent.appendChild(logEntry);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('logContent').innerHTML = '';
+            logMessage('Лог очищен', 'warning');
+        }
+        
+        // Обновление статусов
+        function updateFirebaseStatus(status, isError = false) {
+            const statusElement = document.getElementById('firebaseStatus');
+            statusElement.textContent = status;
+            statusElement.className = `status-value ${isError ? 'status-bad' : 'status-good'}`;
+        }
+        
+        function updateRoomStatus(roomId = null) {
+            const roomElement = document.getElementById('currentRoom');
+            const roomDisplay = document.getElementById('roomDisplay');
+            
+            if (roomId) {
+                roomElement.textContent = roomId;
+                document.getElementById('currentRoomId').textContent = roomId;
+                roomDisplay.style.display = 'block';
+                currentRoomId = roomId;
+            } else {
+                roomElement.textContent = 'Не выбрана';
+                roomDisplay.style.display = 'none';
+                currentRoomId = null;
+            }
+        }
+        
+        // Тест подключения к API
+        async function testConnection() {
+            updateFirebaseStatus('Тестирование подключения...');
+            logMessage('Отправка ping запроса к API...', 'info');
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'ping',
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateFirebaseStatus('✅ Подключение установлено');
+                    logMessage(`✅ Ответ от сервера: ${data.message}`, 'success');
+                    logMessage(`Время ответа: ${new Date(data.timestamp).toLocaleTimeString()}`, 'info');
+                    
+                    if (data.envStatus) {
+                        logMessage(`Статус переменных окружения:`, 'info');
+                        Object.entries(data.envStatus).forEach(([key, value]) => {
+                            logMessage(`  ${key}: ${value ? '✅' : '❌'}`, value ? 'success' : 'error');
+                        });
+                    }
+                } else {
+                    throw new Error(data.error || 'Неизвестная ошибка');
+                }
+            } catch (error) {
+                updateFirebaseStatus('❌ Ошибка подключения', true);
+                logMessage(`❌ Ошибка подключения: ${error.message}`, 'error');
+            }
+        }
+        
+        // Создание комнаты
+        async function createRoom() {
+            updateFirebaseStatus('Создание комнаты...');
+            logMessage('Запрос на создание комнаты...', 'info');
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'createRoom',
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateFirebaseStatus('✅ Комната создана');
+                    updateRoomStatus(data.roomId);
+                    
+                    logMessage(`✅ Комната создана: ${data.roomId}`, 'success');
+                    logMessage(`Сообщение: ${data.message}`, 'info');
+                    
+                    // Автоматически копируем ID комнаты в буфер
+                    copyRoomId(data.roomId);
+                    
+                    // Предлагаем проверить микрофон
+                    setTimeout(() => {
+                        if (!isMicActive) {
+                            logMessage('Хотите проверить микрофон перед началом разговора?', 'warning');
+                        }
+                    }, 1000);
+                } else {
+                    throw new Error(data.error || 'Ошибка создания комнаты');
+                }
+            } catch (error) {
+                updateFirebaseStatus('❌ Ошибка создания комнаты', true);
+                logMessage(`❌ Ошибка: ${error.message}`, 'error');
+            }
+        }
+        
+        // Присоединение к комнате
+        async function joinRoom() {
+            const roomIdInput = document.getElementById('roomIdInput');
+            const roomId = roomIdInput.value.trim().toUpperCase();
+            
+            if (!roomId || roomId.length !== 6) {
+                logMessage('❌ ID комнаты должен состоять из 6 символов', 'error');
+                roomIdInput.focus();
+                return;
+            }
+            
+            updateFirebaseStatus('Присоединение к комнате...');
+            logMessage(`Присоединение к комнате ${roomId}...`, 'info');
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'joinRoom',
+                        roomId: roomId,
+                        userId: userId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateFirebaseStatus('✅ Успешное присоединение');
+                    updateRoomStatus(roomId);
+                    
+                    logMessage(`✅ Присоединились к комнате: ${roomId}`, 'success');
+                    logMessage(`Участник: ${JSON.stringify(data.participant)}`, 'info');
+                    
+                    roomIdInput.value = '';
+                    
+                    // Автоматически проверяем микрофон
+                    setTimeout(() => toggleMicrophone(), 500);
+                } else {
+                    throw new Error(data.error || 'Ошибка присоединения');
+                }
+            } catch (error) {
+                updateFirebaseStatus('❌ Ошибка присоединения', true);
+                logMessage(`❌ Ошибка: ${error.message}`, 'error');
+            }
+        }
+        
+        // Управление микрофоном
+        async function toggleMicrophone() {
+            const micButton = document.getElementById('micButton');
+            const audioIndicator = document.getElementById('audioIndicator');
+            const audioStatus = document.getElementById('audioStatus');
+            
+            if (!isMicActive) {
+                try {
+                    // Запрашиваем доступ к микрофону
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        },
+                        video: false
+                    });
+                    
+                    isMicActive = true;
+                    micButton.innerHTML = '<i class="fas fa-microphone-slash"></i> Выключить микрофон';
+                    micButton.classList.add('btn-danger');
+                    audioIndicator.classList.add('active');
+                    audioStatus.textContent = 'Микрофон активен';
+                    
+                    logMessage('✅ Доступ к микрофону получен', 'success');
+                    logMessage('Готово к аудио-звонку!', 'success');
+                    
+                    // Симуляция уровня звука (для визуализации)
+                    simulateAudioLevel();
+                    
+                } catch (error) {
+                    logMessage(`❌ Ошибка доступа к микрофону: ${error.message}`, 'error');
+                    alert('Для использования аудио-звонка разрешите доступ к микрофону');
+                }
+            } else {
+                // Отключаем микрофон
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+                
+                isMicActive = false;
+                micButton.innerHTML = '<i class="fas fa-microphone"></i> Включить микрофон';
+                micButton.classList.remove('btn-danger');
+                audioIndicator.classList.remove('active');
+                audioStatus.textContent = 'Микрофон не активирован';
+                
+                logMessage('Микрофон отключен', 'warning');
+            }
+        }
+        
+        // Симуляция уровня звука (визуальная обратная связь)
+        function simulateAudioLevel() {
+            if (!isMicActive) return;
+            
+            const audioIndicator = document.getElementById('audioIndicator');
+            
+            // Случайное изменение размера для имитации звука
+            const pulse = () => {
+                if (!isMicActive) return;
+                const size = 8 + Math.random() * 8;
+                audioIndicator.style.transform = `scale(${size / 12})`;
+                setTimeout(pulse, 100 + Math.random() * 200);
+            };
+            
+            pulse();
+        }
+        
+        // Копирование ID комнаты в буфер обмена
+        async function copyRoomId(roomId = null) {
+            const idToCopy = roomId || currentRoomId;
+            
+            if (!idToCopy) {
+                logMessage('❌ Нет активной комнаты для копирования', 'error');
+                return;
+            }
+            
+            try {
+                await navigator.clipboard.writeText(idToCopy);
+                logMessage(`✅ ID комнаты скопирован: ${idToCopy}`, 'success');
+                
+                // Визуальная обратная связь
+                const roomIdElement = document.getElementById('currentRoomId');
+                const originalText = roomIdElement.textContent;
+                roomIdElement.textContent = 'СКОПИРОВАНО!';
+                roomIdElement.style.color = '#4a90e2';
+                
+                setTimeout(() => {
+                    roomIdElement.textContent = originalText;
+                    roomIdElement.style.color = '#2ecc71';
+                }, 1000);
+                
+            } catch (error) {
+                logMessage(`❌ Ошибка копирования: ${error.message}`, 'error');
+            }
+        }
+        
+        // Обработка ввода ID комнаты (автоматический upper case)
+        document.getElementById('roomIdInput').addEventListener('input', function(e) {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        });
+        
+        // Горячие клавиши
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'c' && currentRoomId) {
+                copyRoomId();
+                e.preventDefault();
+            }
+            
+            if (e.key === 'Enter' && document.getElementById('roomIdInput').value) {
+                joinRoom();
+            }
+            
+            if (e.key === 'm' && e.altKey) {
+                toggleMicrophone();
+                e.preventDefault();
+            }
+        });
+        
+        // Периодическая проверка соединения
+        setInterval(() => {
+            if (currentRoomId) {
+                // Можно добавить пинг для поддержания активности комнаты
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
