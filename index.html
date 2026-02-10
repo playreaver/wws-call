@@ -626,12 +626,25 @@
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
                 { 
                     urls: 'turn:openrelay.metered.ca:80',
                     username: 'openrelayproject',
                     credential: 'openrelayproject'
+                },
+                { 
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                { 
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
                 }
-            ]
+            ],
+            iceCandidatePoolSize: 10,
+            iceTransportPolicy: 'all'
         };
         
         // Состояние приложения
@@ -650,16 +663,26 @@
             pendingCandidates: {}, // Для хранения кандидатов до установки remoteDescription
             audioContext: null,
             audioAnalyzers: {},
-            connectionAttempts: {} // Счетчик попыток подключения
+            connectionAttempts: {}, // Счетчик попыток подключения
+            lastPollTime: 0,
+            debugMode: true
         };
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', init);
         
         async function init() {
+            console.log('=== Call App Initialization ===');
+            
             // Генерация ID и имени
             state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             state.userName = generateName();
+            
+            console.log('User ID:', state.userId);
+            console.log('User Name:', state.userName);
+            console.log('WebRTC Support:', !!window.RTCPeerConnection);
+            console.log('Media Devices Support:', 'getUserMedia' in navigator.mediaDevices);
+            console.log('API URL:', API_URL);
             
             // Проверка поддержки
             if (!checkSupport()) {
@@ -669,7 +692,11 @@
             }
         
             // Проверка подключения
-            await checkConnection();
+            const connected = await checkConnection();
+            
+            if (!connected) {
+                showToast('Проверьте подключение к интернету', 3000);
+            }
             
             // Скрываем загрузку
             setTimeout(() => {
@@ -695,20 +722,26 @@
         }
         
         function checkSupport() {
-            return 'RTCPeerConnection' in window && 'getUserMedia' in navigator.mediaDevices;
+            const supported = 'RTCPeerConnection' in window && 'getUserMedia' in navigator.mediaDevices;
+            console.log('WebRTC Support Check:', supported);
+            return supported;
         }
         
         async function checkConnection() {
             try {
+                console.log('Checking API connection...');
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'ping' })
                 });
                 
-                updateConnectionStatus(response.ok);
-                return response.ok;
+                const connected = response.ok;
+                updateConnectionStatus(connected);
+                console.log('API Connection:', connected ? 'OK' : 'FAILED');
+                return connected;
             } catch (error) {
+                console.error('Connection check error:', error);
                 updateConnectionStatus(false);
                 return false;
             }
@@ -728,6 +761,7 @@
         
         // Навигация
         function showScreen(screenId) {
+            console.log('Showing screen:', screenId);
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
         }
@@ -737,6 +771,7 @@
             const toast = document.getElementById('toast');
             if (!toast) return;
             
+            console.log('Toast:', message);
             toast.textContent = message;
             toast.classList.add('show');
             
@@ -748,6 +783,7 @@
         // Создание комнаты
         async function createRoom() {
             showLoading('Создание звонка...');
+            console.log('Creating room...');
             
             try {
                 // Сначала запрашиваем доступ к микрофону
@@ -761,6 +797,7 @@
                     }
                 }
                 
+                console.log('Sending createRoom request...');
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -771,19 +808,22 @@
                     })
                 });
         
+                console.log('Create room response status:', response.status);
                 const data = await response.json();
+                console.log('Create room response:', data);
                 
                 if (data.success) {
                     state.roomId = data.roomId;
                     state.roomOwner = true;
+                    console.log('✅ Room created:', state.roomId);
                     await startCall();
                     showToast('Звонок создан! Код скопирован');
                 } else {
                     throw new Error(data.error || 'Ошибка создания');
                 }
             } catch (error) {
-                showToast('Ошибка создания звонка');
                 console.error('Create room error:', error);
+                showToast('Ошибка создания звонка');
             } finally {
                 hideLoading();
             }
@@ -799,6 +839,7 @@
             }
         
             showLoading('Присоединение...');
+            console.log('Joining room:', code);
             
             try {
                 // Сначала запрашиваем доступ к микрофону
@@ -812,6 +853,7 @@
                     }
                 }
                 
+                console.log('Sending joinRoom request...');
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -823,19 +865,22 @@
                     })
                 });
         
+                console.log('Join room response status:', response.status);
                 const data = await response.json();
+                console.log('Join room response:', data);
                 
                 if (data.success) {
                     state.roomId = code;
                     state.roomOwner = false;
+                    console.log('✅ Joined room:', state.roomId);
                     await startCall();
                     showToast('Присоединились к звонку');
                 } else {
                     throw new Error(data.error || 'Комната не найдена');
                 }
             } catch (error) {
-                showToast('Ошибка присоединения');
                 console.error('Join room error:', error);
+                showToast('Ошибка присоединения');
             } finally {
                 hideLoading();
             }
@@ -844,23 +889,31 @@
         // Запрос доступа к микрофону с обработкой ошибок
         async function requestMicrophonePermission() {
             try {
+                console.log('Requesting microphone permission...');
                 state.localStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true,
-                        channelCount: 2
-                    }
+                        channelCount: 1
+                    },
+                    video: false
                 });
                 
+                console.log('✅ Microphone access granted');
+                console.log('Audio tracks:', state.localStream.getAudioTracks().length);
+                
                 // Включаем микрофон по умолчанию
-                toggleMic();
+                state.isMuted = false;
+                state.localStream.getAudioTracks().forEach(track => {
+                    track.enabled = true;
+                });
+                updateMicUI();
                 
                 return state.localStream;
             } catch (error) {
                 console.error('Microphone permission error:', error);
                 
-                // Показываем понятное сообщение об ошибке
                 let errorMessage = 'Ошибка доступа к микрофону';
                 if (error.name === 'NotAllowedError') {
                     errorMessage = 'Доступ к микрофону отклонен. Разрешите доступ в настройках браузера.';
@@ -878,6 +931,8 @@
         // Начало звонка
         async function startCall() {
             try {
+                console.log('🚀 Starting call in room:', state.roomId);
+                
                 // Показываем экран звонка
                 showScreen('callScreen');
                 document.getElementById('currentRoomCode').textContent = state.roomId;
@@ -896,12 +951,9 @@
                 // Обновляем список участников
                 await updateParticipants();
                 
-                // Подключаемся ко всем существующим участникам
-                connectToAllParticipants();
-                
             } catch (error) {
-                showToast('Ошибка начала звонка: ' + error.message);
                 console.error('Start call error:', error);
+                showToast('Ошибка начала звонка: ' + error.message);
                 showScreen('homeScreen');
             }
         }
@@ -921,7 +973,6 @@
             if (!state.localStream) {
                 // Пытаемся получить доступ к микрофону
                 requestMicrophonePermission().then(() => {
-                    // После получения доступа включаем микрофон
                     state.isMuted = false;
                     updateMicUI();
                     showToast('Микрофон включен', 1500);
@@ -938,6 +989,11 @@
             
             updateMicUI();
             showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
+            
+            // Отправляем статус всем участникам
+            Object.keys(state.peerConnections).forEach(peerId => {
+                sendSignal(peerId, 'audioStatus', { muted: state.isMuted });
+            });
         }
         
         function updateMicUI() {
@@ -1017,14 +1073,28 @@
             if (state.updateInterval) clearInterval(state.updateInterval);
             if (state.signalInterval) clearInterval(state.signalInterval);
             
+            console.log('🔄 Starting updates for room:', state.roomId);
+            
             // Обновление списка участников каждые 3 секунды
-            state.updateInterval = setInterval(updateParticipants, 3000);
+            state.updateInterval = setInterval(() => {
+                updateParticipants();
+            }, 3000);
             
             // Получение сигналов WebRTC
-            state.signalInterval = setInterval(pollSignals, 2000);
+            state.signalInterval = setInterval(() => {
+                pollSignals();
+            }, 2000);
             
             // Проверка подключения каждые 30 секунд
-            setInterval(checkConnection, 30000);
+            setInterval(() => {
+                checkConnection();
+            }, 30000);
+            
+            // Выполняем первый запрос сразу
+            setTimeout(() => {
+                updateParticipants();
+                pollSignals();
+            }, 500);
         }
         
         // Обновление списка участников
@@ -1032,6 +1102,7 @@
             if (!state.roomId) return;
             
             try {
+                console.log('🔄 Updating participants...');
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1045,13 +1116,48 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success) {
+                        const oldParticipants = state.participants.map(p => p.id).sort();
+                        const newParticipants = data.participants.map(p => p.id).sort();
+                        
+                        // Проверяем, изменился ли список участников
+                        const participantsChanged = JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants);
+                        
                         state.participants = data.participants || [];
-                        renderParticipants();
+                        
+                        if (participantsChanged) {
+                            console.log('👥 Participants updated:', state.participants.length, 'participants');
+                            renderParticipants();
+                            
+                            // Подключаемся к новым участникам
+                            connectToNewParticipants(oldParticipants, newParticipants);
+                        }
                     }
                 }
             } catch (error) {
                 console.error('Update participants error:', error);
             }
+        }
+        
+        // Подключение к новым участникам
+        function connectToNewParticipants(oldList, newList) {
+            const newParticipants = newList.filter(id => 
+                id !== state.userId && 
+                !oldList.includes(id) && 
+                !state.peerConnections[id]
+            );
+            
+            newParticipants.forEach(peerId => {
+                console.log('🤝 Connecting to new participant:', peerId);
+                createPeerConnection(peerId);
+            });
+            
+            // Удаляем соединения с участниками, которые вышли
+            Object.keys(state.peerConnections).forEach(peerId => {
+                if (!newList.includes(peerId) && peerId !== state.userId) {
+                    console.log('👋 Cleaning up connection to left participant:', peerId);
+                    cleanupPeerConnection(peerId);
+                }
+            });
         }
         
         // Подключение ко всем участникам
@@ -1069,6 +1175,16 @@
             if (!container) return;
             
             container.innerHTML = '';
+            
+            if (state.participants.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.4);">
+                        <i class="fas fa-users" style="font-size: 48px; margin-bottom: 20px;"></i>
+                        <p>Ожидание участников...</p>
+                    </div>
+                `;
+                return;
+            }
             
             // Сортируем: сначала создатель, потом говорящие, потом остальные
             const sortedParticipants = [...state.participants].sort((a, b) => {
@@ -1118,7 +1234,7 @@
                     </div>
                 </div>
                 ${state.roomOwner && !isMe ? `
-                    <button class="kick-btn" onclick="kickParticipant('${participant.id}')">
+                    <button class="kick-btn" onclick="kickParticipant('${participant.id}')" title="Удалить участника">
                         <i class="fas fa-user-slash"></i>
                     </button>
                 ` : ''}
@@ -1175,21 +1291,12 @@
         
         // WebRTC соединения
         async function createPeerConnection(peerId) {
-            if (state.peerConnections[peerId]) return;
-            
-            console.log(`Creating peer connection to ${peerId}`);
-            
-            // Ограничиваем количество попыток подключения
-            if (!state.connectionAttempts[peerId]) {
-                state.connectionAttempts[peerId] = 0;
-            }
-            
-            if (state.connectionAttempts[peerId] > 3) {
-                console.log(`Too many connection attempts to ${peerId}, skipping`);
+            if (state.peerConnections[peerId]) {
+                console.log(`⚠️ Peer connection to ${peerId} already exists`);
                 return;
             }
             
-            state.connectionAttempts[peerId]++;
+            console.log(`🔗 Creating peer connection to ${peerId}`);
             
             try {
                 const pc = new RTCPeerConnection(config);
@@ -1200,6 +1307,7 @@
                     state.localStream.getTracks().forEach(track => {
                         try {
                             pc.addTrack(track, state.localStream);
+                            console.log(`🔗 Added ${track.kind} track to ${peerId}`);
                         } catch (error) {
                             console.error('Error adding track:', error);
                         }
@@ -1209,26 +1317,26 @@
                 // Обработчики событий
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
-                        console.log(`ICE candidate for ${peerId}:`, e.candidate.type);
+                        console.log(`❄️ ICE candidate for ${peerId}:`, e.candidate.type);
                         sendSignal(peerId, 'candidate', e.candidate);
+                    } else {
+                        console.log(`❄️ ICE gathering complete for ${peerId}`);
                     }
                 };
                 
                 pc.ontrack = (e) => {
-                    console.log(`Received track from ${peerId}`);
+                    console.log(`🎵 Received track from ${peerId}`);
                     handleRemoteTrack(e, peerId);
                 };
                 
                 pc.oniceconnectionstatechange = () => {
-                    console.log(`ICE state for ${peerId}:`, pc.iceConnectionState);
+                    console.log(`🔗 ICE state for ${peerId}:`, pc.iceConnectionState);
                     if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
                         console.log(`✅ Connected to ${peerId}`);
-                        state.connectionAttempts[peerId] = 0; // Сброс счетчика при успешном подключении
                     } else if (pc.iceConnectionState === 'disconnected' || 
                                pc.iceConnectionState === 'failed' ||
                                pc.iceConnectionState === 'closed') {
                         console.log(`❌ Disconnected from ${peerId}`);
-                        // Не очищаем сразу, даем шанс на переподключение
                         setTimeout(() => {
                             if (pc.iceConnectionState !== 'connected' && 
                                 pc.iceConnectionState !== 'checking') {
@@ -1238,24 +1346,26 @@
                     }
                 };
                 
-                // Создаем предложение только если мы инициатор (userId < peerId)
-                if (state.userId < peerId) {
-                    try {
-                        const offer = await pc.createOffer({
-                            offerToReceiveAudio: true,
-                            offerToReceiveVideo: false
-                        });
-                        
-                        await pc.setLocalDescription(offer);
-                        console.log(`Created offer for ${peerId}`);
-                        await sendSignal(peerId, 'offer', offer);
-                    } catch (error) {
-                        console.error('Create offer error:', error);
-                    }
+                // ВСЕГДА создаем offer - убрали условие сравнения ID
+                console.log(`📤 Creating offer for ${peerId}`);
+                try {
+                    const offer = await pc.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: false
+                    });
+                    
+                    console.log(`📤 Setting local description for ${peerId}`);
+                    await pc.setLocalDescription(offer);
+                    console.log(`📤 Sending offer to ${peerId}`);
+                    await sendSignal(peerId, 'offer', offer);
+                    console.log(`✅ Offer sent to ${peerId}`);
+                } catch (error) {
+                    console.error(`❌ Error creating/sending offer to ${peerId}:`, error);
                 }
                 
                 // Обрабатываем ожидающие кандидаты
                 if (state.pendingCandidates[peerId]) {
+                    console.log(`🔗 Processing ${state.pendingCandidates[peerId].length} pending candidates for ${peerId}`);
                     state.pendingCandidates[peerId].forEach(candidate => {
                         try {
                             pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1267,13 +1377,13 @@
                 }
                 
             } catch (error) {
-                console.error('Create peer connection error:', error);
+                console.error(`❌ Create peer connection error for ${peerId}:`, error);
                 cleanupPeerConnection(peerId);
             }
         }
         
         function handleRemoteTrack(event, peerId) {
-            console.log(`Setting up remote track for ${peerId}`);
+            console.log(`🎵 Setting up remote track for ${peerId}`);
             
             // Удаляем существующий аудио элемент
             const existingAudio = document.getElementById(`audio_${peerId}`);
@@ -1291,7 +1401,7 @@
             // Устанавливаем поток
             if (event.streams && event.streams[0]) {
                 audio.srcObject = event.streams[0];
-                console.log(`Set audio srcObject for ${peerId}`);
+                console.log(`🔊 Audio stream set for ${peerId}`);
                 
                 // Настраиваем детектор речи
                 setupSpeechDetector(audio, peerId);
@@ -1385,6 +1495,8 @@
             if (audio) {
                 audio.remove();
             }
+            
+            console.log(`🧹 Cleaned up peer connection to ${peerId}`);
         }
         
         // Получение сигналов
@@ -1392,6 +1504,7 @@
             if (!state.roomId) return;
             
             try {
+                console.log(`📡 Polling signals for room ${state.roomId}`);
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1399,40 +1512,61 @@
                         action: 'getSignals',
                         roomId: state.roomId,
                         userId: state.userId,
-                        timestamp: Date.now() - 10000 // 10 секунд
+                        timestamp: state.lastPollTime
                     })
                 });
         
                 if (response.ok) {
                     const data = await response.json();
                     if (data.success && data.signals) {
+                        console.log(`📡 Received ${data.signals.length} signals`);
+                        state.lastPollTime = Date.now();
+                        
                         for (const signal of data.signals) {
+                            console.log(`📨 Processing signal from ${signal.from}, type: ${signal.type}`);
                             await handleSignal(signal);
                         }
                     }
                 }
             } catch (error) {
-                console.error('Signal polling error:', error);
+                console.error('📡 Signal polling error:', error);
             }
         }
         
         async function handleSignal(signal) {
-            if (signal.from === state.userId) return;
+            if (signal.from === state.userId) {
+                console.log(`📨 Ignoring signal from self`);
+                return;
+            }
             
             try {
                 switch (signal.type) {
                     case 'offer':
+                        console.log(`📨 Handling offer from ${signal.from}`);
                         await handleOffer(signal.from, signal.data);
                         break;
                     case 'answer':
+                        console.log(`📨 Handling answer from ${signal.from}`);
                         await handleAnswer(signal.from, signal.data);
                         break;
                     case 'candidate':
+                        console.log(`📨 Handling candidate from ${signal.from}`);
                         await handleCandidate(signal.from, signal.data);
                         break;
+                    case 'audioStatus':
+                        console.log(`📨 Audio status from ${signal.from}:`, signal.data);
+                        break;
+                    case 'kicked':
+                        if (signal.to === state.userId) {
+                            showToast('Вас удалили из звонка');
+                            leaveRoom();
+                        }
+                        break;
+                    default:
+                        console.log(`📨 Unknown signal type: ${signal.type}`);
                 }
             } catch (error) {
-                console.error('Handle signal error:', error);
+                console.error(`❌ Error handling signal from ${signal.from}:`, error);
             }
         }
         
@@ -1457,11 +1591,12 @@
         
         // Обработка предложения
         async function handleOffer(peerId, offer) {
-            console.log(`Received offer from ${peerId}`);
+            console.log(`📨 Received offer from ${peerId}`);
             
             let pc = state.peerConnections[peerId];
             
             if (!pc) {
+                console.log(`🔗 Creating new peer connection for offer from ${peerId}`);
                 pc = new RTCPeerConnection(config);
                 state.peerConnections[peerId] = pc;
                 
@@ -1488,28 +1623,28 @@
                 }
             }
             
-            // Проверяем текущее состояние
-            if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                    console.log(`Set remote description from ${peerId}`);
-                    
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    await sendSignal(peerId, 'answer', answer);
-                    
-                    console.log(`Sent answer to ${peerId}`);
-                } catch (error) {
-                    console.error('Error handling offer:', error);
-                }
-            } else {
-                console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
+            try {
+                console.log(`🔗 Setting remote description from ${peerId}`);
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                
+                console.log(`🔗 Creating answer for ${peerId}`);
+                const answer = await pc.createAnswer();
+                
+                console.log(`🔗 Setting local description for ${peerId}`);
+                await pc.setLocalDescription(answer);
+                
+                console.log(`📤 Sending answer to ${peerId}`);
+                await sendSignal(peerId, 'answer', answer);
+                
+                console.log(`✅ Answer sent to ${peerId}`);
+            } catch (error) {
+                console.error(`❌ Error handling offer from ${peerId}:`, error);
             }
         }
         
         // Обработка ответа
         async function handleAnswer(peerId, answer) {
-            console.log(`Received answer from ${peerId}`);
+            console.log(`📨 Received answer from ${peerId}`);
             
             const pc = state.peerConnections[peerId];
             if (!pc) {
@@ -1517,28 +1652,21 @@
                 return;
             }
             
-            // Проверяем что мы в правильном состоянии
-            if (pc.signalingState === 'have-local-offer') {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                    console.log(`Set remote description from ${peerId}`);
-                } catch (error) {
-                    console.error('Error setting remote description:', error);
-                }
-            } else if (pc.signalingState === 'stable') {
-                console.log(`Already in stable state, ignoring answer from ${peerId}`);
-            } else {
-                console.warn(`Cannot set remote description in state: ${pc.signalingState}`);
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log(`✅ Set remote description from ${peerId}`);
+            } catch (error) {
+                console.error(`❌ Error setting remote description from ${peerId}:`, error);
             }
         }
         
         // Обработка кандидата
         async function handleCandidate(peerId, candidate) {
-            console.log(`Received candidate from ${peerId}`);
+            console.log(`📨 Received candidate from ${peerId}`);
             
             const pc = state.peerConnections[peerId];
             if (!pc) {
-                console.warn(`No peer connection for ${peerId}, caching candidate`);
+                console.log(`⏳ No peer connection for ${peerId}, caching candidate`);
                 
                 // Кэшируем кандидата для будущего подключения
                 if (!state.pendingCandidates[peerId]) {
@@ -1548,23 +1676,14 @@
                 return;
             }
             
-            // Проверяем что удаленное описание установлено
-            if (pc.remoteDescription) {
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (error) {
-                    // Игнорируем ошибки добавления кандидатов (часто они не важны)
-                    if (!error.message.includes('already has an ICE candidate')) {
-                        console.warn('Add ICE candidate warning:', error.message);
-                    }
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log(`✅ Added ICE candidate from ${peerId}`);
+            } catch (error) {
+                // Игнорируем некоторые ошибки
+                if (!error.message.includes('already has an ICE candidate')) {
+                    console.warn(`⚠️ Add ICE candidate warning: ${error.message}`);
                 }
-            } else {
-                console.log('Remote description not set yet, caching candidate');
-                // Кэшируем кандидата
-                if (!state.pendingCandidates[peerId]) {
-                    state.pendingCandidates[peerId] = [];
-                }
-                state.pendingCandidates[peerId].push(candidate);
             }
         }
         
@@ -1598,6 +1717,8 @@
         }
         
         function cleanup() {
+            console.log('🧹 Cleaning up...');
+            
             // Очистка интервалов
             if (state.updateInterval) clearInterval(state.updateInterval);
             if (state.signalInterval) clearInterval(state.signalInterval);
@@ -1637,6 +1758,7 @@
             state.participants = [];
             state.pendingCandidates = {};
             state.connectionAttempts = {};
+            state.lastPollTime = 0;
         }
         
         // Утилиты
