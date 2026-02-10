@@ -620,13 +620,21 @@
         // Конфигурация
         const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
         
-        // WebRTC Configuration
+        // Улучшенная WebRTC Configuration с лучшими STUN/TURN серверами
         const config = {
             iceServers: [
+                // Google STUN серверы
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+                
+                // Twilio STUN серверы
+                { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
+                { urls: 'stun:global.stun.twilio.com:3478?transport=tcp' },
+                
+                // Публичные TURN серверы
                 { 
                     urls: 'turn:openrelay.metered.ca:80',
                     username: 'openrelayproject',
@@ -641,10 +649,23 @@
                     urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                     username: 'openrelayproject',
                     credential: 'openrelayproject'
+                },
+                // Дополнительные TURN серверы
+                {
+                    urls: 'turn:relay1.expressturn.com:3478',
+                    username: 'efCQNq5qQNUPqUvM',
+                    credential: '7zqS7qDjySdpeyqX'
+                },
+                {
+                    urls: 'turn:relay2.expressturn.com:3478',
+                    username: 'efCQNq5qQNUPqUvM',
+                    credential: '7zqS7qDjySdpeyqX'
                 }
             ],
             iceCandidatePoolSize: 10,
-            iceTransportPolicy: 'all'
+            iceTransportPolicy: 'all',
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
         };
         
         // Состояние приложения
@@ -660,13 +681,14 @@
             signalInterval: null,
             updateInterval: null,
             participants: [],
-            pendingCandidates: {}, // Для хранения кандидатов до установки remoteDescription
+            pendingCandidates: {},
             audioContext: null,
             audioAnalyzers: {},
-            connectionAttempts: {}, // Счетчик попыток подключения
+            connectionAttempts: {},
             lastPollTime: 0,
-            processedSignals: new Set(), // Для отслеживания обработанных сигналов
-            debugMode: true
+            processedSignals: new Set(),
+            reconnectionAttempts: {}, // Для отслеживания попыток переподключения
+            statsInterval: null // Для мониторинга соединения
         };
         
         // Инициализация
@@ -682,7 +704,6 @@
             console.log('User ID:', state.userId);
             console.log('User Name:', state.userName);
             console.log('WebRTC Support:', !!window.RTCPeerConnection);
-            console.log('Media Devices Support:', 'getUserMedia' in navigator.mediaDevices);
             console.log('API URL:', API_URL);
             
             // Проверка поддержки
@@ -723,7 +744,7 @@
         }
         
         function checkSupport() {
-            const supported = 'RTCPeerConnection' in window && 'getUserMedia' in navigator.mediaDevices;
+            const supported = 'RTCPeerConnection' в window && 'getUserMedia' в navigator.mediaDevices;
             console.log('WebRTC Support Check:', supported);
             return supported;
         }
@@ -887,7 +908,7 @@
             }
         }
         
-        // Запрос доступа к микрофону с обработкой ошибок
+        // Запрос доступа к микрофону
         async function requestMicrophonePermission() {
             try {
                 console.log('Requesting microphone permission...');
@@ -972,7 +993,6 @@
         // Управление микрофоном
         function toggleMic() {
             if (!state.localStream) {
-                // Пытаемся получить доступ к микрофону
                 requestMicrophonePermission().then(() => {
                     state.isMuted = false;
                     updateMicUI();
@@ -1009,7 +1029,7 @@
             btn.title = state.isMuted ? 'Включить микрофон' : 'Выключить микрофон';
         }
         
-        // Управление динамиком (только мобильные)
+        // Управление динамиком
         function toggleSpeaker() {
             state.isSpeaker = !state.isSpeaker;
             
@@ -1018,8 +1038,7 @@
             
             btn.classList.toggle('active', state.isSpeaker);
             
-            // На мобильных - переключаем на основной динамик
-            if (state.isSpeaker && 'setSinkId' in HTMLAudioElement.prototype) {
+            if (state.isSpeaker && 'setSinkId' в HTMLAudioElement.prototype) {
                 document.querySelectorAll('audio').forEach(audio => {
                     audio.setSinkId('').catch(console.error);
                 });
@@ -1036,7 +1055,6 @@
                 await navigator.clipboard.writeText(state.roomId);
                 showToast('Код скопирован');
             } catch (error) {
-                // Fallback
                 const input = document.createElement('input');
                 input.value = state.roomId;
                 document.body.appendChild(input);
@@ -1047,7 +1065,7 @@
             }
         }
         
-        // Поделиться кодом (только мобильные)
+        // Поделиться кодом
         async function shareRoomCode() {
             if (!state.roomId) return;
             
@@ -1070,9 +1088,9 @@
         
         // Запуск обновлений
         function startUpdates() {
-            // Очищаем предыдущие интервалы
             if (state.updateInterval) clearInterval(state.updateInterval);
             if (state.signalInterval) clearInterval(state.signalInterval);
+            if (state.statsInterval) clearInterval(state.statsInterval);
             
             console.log('🔄 Starting updates for room:', state.roomId);
             
@@ -1086,16 +1104,70 @@
                 pollSignals();
             }, 2000);
             
-            // Проверка подключения каждые 30 секунд
+            // Проверка подключения
             setInterval(() => {
                 checkConnection();
             }, 30000);
             
-            // Выполняем первый запрос сразу
+            // Мониторинг статистики соединения
+            state.statsInterval = setInterval(() => {
+                monitorConnections();
+            }, 10000);
+            
+            // Первый запрос
             setTimeout(() => {
                 updateParticipants();
                 pollSignals();
             }, 500);
+        }
+        
+        // Мониторинг соединений
+        async function monitorConnections() {
+            Object.keys(state.peerConnections).forEach(async (peerId) => {
+                const pc = state.peerConnections[peerId];
+                if (pc && pc.iceConnectionState) {
+                    console.log(`📊 ${peerId}: ICE=${pc.iceConnectionState}, Signaling=${pc.signalingState}`);
+                    
+                    // Если соединение в disconnected более 30 секунд, пытаемся переподключиться
+                    if (pc.iceConnectionState === 'disconnected') {
+                        if (!state.reconnectionAttempts[peerId]) {
+                            state.reconnectionAttempts[peerId] = { startTime: Date.now(), attempts: 0 };
+                        }
+                        
+                        const disconnectedTime = Date.now() - state.reconnectionAttempts[peerId].startTime;
+                        if (disconnectedTime > 30000 && state.reconnectionAttempts[peerId].attempts < 3) {
+                            console.log(`🔄 Attempting to reconnect to ${peerId}`);
+                            state.reconnectionAttempts[peerId].attempts++;
+                            await attemptReconnection(peerId);
+                        }
+                    } else if (pc.iceConnectionState === 'connected') {
+                        // Сброс счетчика переподключений при успешном соединении
+                        delete state.reconnectionAttempts[peerId];
+                    }
+                }
+            });
+        }
+        
+        // Попытка переподключения
+        async function attemptReconnection(peerId) {
+            console.log(`🔁 Reconnection attempt for ${peerId}`);
+            
+            const pc = state.peerConnections[peerId];
+            if (!pc) return;
+            
+            try {
+                // Создаем новый offer
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    iceRestart: true // Важно: перезапуск ICE
+                });
+                
+                await pc.setLocalDescription(offer);
+                await sendSignal(peerId, 'offer', offer);
+                console.log(`📤 Sent renegotiation offer to ${peerId}`);
+            } catch (error) {
+                console.error(`❌ Reconnection error for ${peerId}:`, error);
+            }
         }
         
         // Обновление списка участников
@@ -1120,7 +1192,6 @@
                         const oldParticipants = state.participants.map(p => p.id).sort();
                         const newParticipants = data.participants.map(p => p.id).sort();
                         
-                        // Проверяем, изменился ли список участников
                         const participantsChanged = JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants);
                         
                         state.participants = data.participants || [];
@@ -1129,7 +1200,6 @@
                             console.log('👥 Participants updated:', state.participants.length, 'participants');
                             renderParticipants();
                             
-                            // Подключаемся к новым участникам
                             connectToNewParticipants(oldParticipants, newParticipants);
                         }
                     }
@@ -1152,20 +1222,11 @@
                 createPeerConnection(peerId);
             });
             
-            // Удаляем соединения с участниками, которые вышли
+            // Удаляем соединения с вышедшими участниками
             Object.keys(state.peerConnections).forEach(peerId => {
                 if (!newList.includes(peerId) && peerId !== state.userId) {
                     console.log('👋 Cleaning up connection to left participant:', peerId);
                     cleanupPeerConnection(peerId);
-                }
-            });
-        }
-        
-        // Подключение ко всем участникам
-        function connectToAllParticipants() {
-            state.participants.forEach(p => {
-                if (p.id !== state.userId && !state.peerConnections[p.id]) {
-                    createPeerConnection(p.id);
                 }
             });
         }
@@ -1187,7 +1248,6 @@
                 return;
             }
             
-            // Сортируем: сначала создатель, потом говорящие, потом остальные
             const sortedParticipants = [...state.participants].sort((a, b) => {
                 if (a.isOwner && !b.isOwner) return -1;
                 if (!a.isOwner && b.isOwner) return 1;
@@ -1215,7 +1275,6 @@
             const card = document.createElement('div');
             card.className = `participant-card ${isSpeaking ? 'speaking' : ''} ${isMe ? 'me' : ''}`;
             
-            // Аватар
             const initials = getInitials(participant.name || participant.id);
             const color = getColor(participant.id);
             
@@ -1290,7 +1349,7 @@
             }
         }
         
-        // WebRTC соединения
+        // WebRTC соединения - УЛУЧШЕННАЯ ВЕРСИЯ
         async function createPeerConnection(peerId) {
             if (state.peerConnections[peerId]) {
                 console.log(`⚠️ Peer connection to ${peerId} already exists`);
@@ -1299,15 +1358,13 @@
             
             console.log(`🔗 Creating peer connection to ${peerId}`);
             
-            // Проверяем, не создаем ли мы соединение с самим собой
             if (peerId === state.userId) {
                 console.log(`⚠️ Cannot create peer connection to self`);
                 return;
             }
             
-            // Проверяем, не пытаемся ли мы создать соединение с пользователем, который уже пытается подключиться к нам
-            if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 0) {
-                console.log(`⏳ Already attempting to connect to ${peerId}, waiting...`);
+            if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 2) {
+                console.log(`⏳ Too many connection attempts to ${peerId}`);
                 return;
             }
             
@@ -1320,7 +1377,7 @@
                 const pc = new RTCPeerConnection(config);
                 state.peerConnections[peerId] = pc;
                 
-                // Добавляем локальный поток
+                // Улучшенная обработка потока
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => {
                         try {
@@ -1349,53 +1406,80 @@
                 
                 pc.oniceconnectionstatechange = () => {
                     console.log(`🔗 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
-                    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-                        console.log(`✅ Connected to ${peerId}`);
-                        state.connectionAttempts[peerId] = 0;
-                    } else if (pc.iceConnectionState === 'disconnected' || 
-                               pc.iceConnectionState === 'failed' ||
-                               pc.iceConnectionState === 'closed') {
-                        console.log(`❌ Disconnected from ${peerId}`);
-                        setTimeout(() => {
-                            if (pc.iceConnectionState !== 'connected' && 
-                                pc.iceConnectionState !== 'checking') {
-                                cleanupPeerConnection(peerId);
-                            }
-                        }, 5000);
+                    
+                    switch(pc.iceConnectionState) {
+                        case 'connected':
+                        case 'completed':
+                            console.log(`✅ Connected to ${peerId}`);
+                            state.connectionAttempts[peerId] = 0;
+                            break;
+                            
+                        case 'disconnected':
+                            console.log(`⚠️ Disconnected from ${peerId} - attempting to recover`);
+                            // Пытаемся восстановить соединение
+                            setTimeout(() => {
+                                if (pc.iceConnectionState === 'disconnected') {
+                                    console.log(`🔄 Initiating ICE restart for ${peerId}`);
+                                    attemptIceRestart(pc, peerId);
+                                }
+                            }, 2000);
+                            break;
+                            
+                        case 'failed':
+                            console.log(`❌ Connection failed to ${peerId}`);
+                            // Пытаемся переподключиться через некоторое время
+                            setTimeout(() => {
+                                if (state.participants.some(p => p.id === peerId)) {
+                                    console.log(`🔄 Attempting to reconnect to ${peerId}`);
+                                    cleanupPeerConnection(peerId);
+                                    setTimeout(() => createPeerConnection(peerId), 1000);
+                                }
+                            }, 5000);
+                            break;
+                            
+                        case 'closed':
+                            console.log(`❌ Connection closed to ${peerId}`);
+                            cleanupPeerConnection(peerId);
+                            break;
                     }
                 };
                 
-                pc.onsignalingstatechange = () => {
-                    console.log(`🔗 Signaling state for ${peerId}: ${pc.signalingState}`);
+                pc.onnegotiationneeded = async () => {
+                    console.log(`🔄 Negotiation needed for ${peerId}`);
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal(peerId, 'offer', offer);
+                    } catch (error) {
+                        console.error(`❌ Error during negotiation with ${peerId}:`, error);
+                    }
                 };
                 
-                // Создаем offer только если мы инициатор (userId < peerId)
+                // Определяем инициатора
                 const shouldCreateOffer = state.userId < peerId;
-                console.log(`🤔 Should create offer for ${peerId}? ${shouldCreateOffer} (${state.userId} < ${peerId})`);
+                console.log(`🤔 Should create offer for ${peerId}? ${shouldCreateOffer}`);
                 
                 if (shouldCreateOffer) {
-                    console.log(`📤 Creating offer for ${peerId} (we are initiator)`);
+                    console.log(`📤 Creating initial offer for ${peerId}`);
                     try {
                         const offer = await pc.createOffer({
                             offerToReceiveAudio: true,
                             offerToReceiveVideo: false
                         });
                         
-                        console.log(`📤 Setting local description for ${peerId}`);
                         await pc.setLocalDescription(offer);
-                        console.log(`📤 Sending offer to ${peerId}`);
                         await sendSignal(peerId, 'offer', offer);
-                        console.log(`✅ Offer sent to ${peerId}`);
+                        console.log(`✅ Initial offer sent to ${peerId}`);
                     } catch (error) {
-                        console.error(`❌ Error creating/sending offer to ${peerId}:`, error);
+                        console.error(`❌ Error creating initial offer for ${peerId}:`, error);
                     }
                 } else {
-                    console.log(`⏳ Waiting for offer from ${peerId} (they are initiator)`);
+                    console.log(`⏳ Waiting for offer from ${peerId}`);
                 }
                 
-                // Обрабатываем ожидающие кандидаты
+                // Обработка ожидающих кандидатов
                 if (state.pendingCandidates[peerId]) {
-                    console.log(`🔗 Processing ${state.pendingCandidates[peerId].length} pending candidates for ${peerId}`);
+                    console.log(`🔗 Processing ${state.pendingCandidates[peerId].length} pending candidates`);
                     state.pendingCandidates[peerId].forEach(candidate => {
                         try {
                             pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1412,32 +1496,49 @@
             }
         }
         
+        // Перезапуск ICE
+        async function attemptIceRestart(pc, peerId) {
+            try {
+                console.log(`🔄 Attempting ICE restart for ${peerId}`);
+                const offer = await pc.createOffer({ iceRestart: true });
+                await pc.setLocalDescription(offer);
+                await sendSignal(peerId, 'offer', offer);
+                console.log(`✅ ICE restart offer sent to ${peerId}`);
+            } catch (error) {
+                console.error(`❌ ICE restart failed for ${peerId}:`, error);
+            }
+        }
+        
         function handleRemoteTrack(event, peerId) {
             console.log(`🎵 Setting up remote track for ${peerId}`);
             
-            // Удаляем существующий аудио элемент
             const existingAudio = document.getElementById(`audio_${peerId}`);
             if (existingAudio) {
                 existingAudio.remove();
             }
             
-            // Создаем новый аудио элемент
             const audio = document.createElement('audio');
             audio.id = `audio_${peerId}`;
             audio.autoplay = true;
             audio.volume = 0.8;
             audio.style.display = 'none';
             
-            // Устанавливаем поток
+            // Важно: добавляем обработчики ошибок
+            audio.onerror = (e) => {
+                console.error(`🔊 Audio error for ${peerId}:`, e);
+            };
+            
+            audio.oncanplay = () => {
+                console.log(`🔊 Audio can play for ${peerId}`);
+            };
+            
             if (event.streams && event.streams[0]) {
                 audio.srcObject = event.streams[0];
                 console.log(`🔊 Audio stream set for ${peerId}`);
                 
-                // Настраиваем детектор речи
                 setupSpeechDetector(audio, peerId);
             }
             
-            // Добавляем в контейнер
             const container = document.getElementById('audioContainer');
             if (container) {
                 container.appendChild(audio);
@@ -1480,7 +1581,6 @@
                                 state.audioAnalyzers[peerId].speaking = isSpeaking;
                                 state.audioAnalyzers[peerId].lastUpdate = Date.now();
                                 
-                                // Обновляем UI
                                 if (isSpeaking) {
                                     renderParticipants();
                                 } else {
@@ -1563,10 +1663,8 @@
         }
         
         async function handleSignal(signal) {
-            // Создаем уникальный ID для сигнала
             const signalId = `${signal.from}_${signal.type}_${JSON.stringify(signal.data)}`;
             
-            // Проверяем, не обрабатывали ли мы уже этот сигнал
             if (state.processedSignals.has(signalId)) {
                 console.log(`📨 Skipping duplicate signal: ${signalId}`);
                 return;
@@ -1574,7 +1672,6 @@
             
             state.processedSignals.add(signalId);
             
-            // Очищаем старые сигналы (храним только последние 100)
             if (state.processedSignals.size > 100) {
                 const first = state.processedSignals.values().next().value;
                 state.processedSignals.delete(first);
@@ -1590,15 +1687,12 @@
             try {
                 switch (signal.type) {
                     case 'offer':
-                        console.log(`📨 Handling offer from ${signal.from}`);
                         await handleOffer(signal.from, signal.data);
                         break;
                     case 'answer':
-                        console.log(`📨 Handling answer from ${signal.from}`);
                         await handleAnswer(signal.from, signal.data);
                         break;
                     case 'candidate':
-                        console.log(`📨 Handling candidate from ${signal.from}`);
                         await handleCandidate(signal.from, signal.data);
                         break;
                     case 'audioStatus':
@@ -1642,13 +1736,11 @@
             console.log(`📨 Received offer from ${peerId}`);
             
             let pc = state.peerConnections[peerId];
-            let createdNew = false;
             
             if (!pc) {
                 console.log(`🔗 Creating new peer connection for offer from ${peerId}`);
                 pc = new RTCPeerConnection(config);
                 state.peerConnections[peerId] = pc;
-                createdNew = true;
                 
                 // Настройка обработчиков
                 pc.onicecandidate = (e) => {
@@ -1661,10 +1753,6 @@
                     handleRemoteTrack(e, peerId);
                 };
                 
-                pc.oniceconnectionstatechange = () => {
-                    console.log(`🔗 ICE state for ${peerId}:`, pc.iceConnectionState);
-                };
-                
                 // Добавляем локальный поток
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => {
@@ -1675,38 +1763,17 @@
                         }
                     });
                 }
-            } else {
-                console.log(`🔗 Using existing peer connection for offer from ${peerId}`);
             }
             
             try {
-                const currentState = pc.signalingState;
-                console.log(`🔗 Current signaling state before setting remote: ${currentState}`);
-                
-                // Проверяем, не пытаемся ли мы установить offer, когда уже есть локальное описание
-                if (pc.localDescription && pc.localDescription.type === 'offer') {
-                    console.log(`⚠️ We already sent an offer to ${peerId}, ignoring their offer`);
-                    return;
-                }
-                
-                console.log(`🔗 Setting remote description from ${peerId}`);
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                console.log(`✅ Set remote description from ${peerId}`);
                 
-                // Создаем answer только если мы создали новое соединение или у нас еще нет локального описания
-                if (createdNew || !pc.localDescription) {
-                    console.log(`🔗 Creating answer for ${peerId}`);
-                    const answer = await pc.createAnswer();
-                    
-                    console.log(`🔗 Setting local description (answer) for ${peerId}`);
-                    await pc.setLocalDescription(answer);
-                    
-                    console.log(`📤 Sending answer to ${peerId}`);
-                    await sendSignal(peerId, 'answer', answer);
-                    
-                    console.log(`✅ Answer sent to ${peerId}`);
-                } else {
-                    console.log(`ℹ️ Already have local description, not creating duplicate answer for ${peerId}`);
-                }
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await sendSignal(peerId, 'answer', answer);
+                console.log(`✅ Answer sent to ${peerId}`);
+                
             } catch (error) {
                 console.error(`❌ Error handling offer from ${peerId}:`, error);
             }
@@ -1722,31 +1789,11 @@
                 return;
             }
             
-            // Проверяем текущее состояние соединения
-            const currentState = pc.signalingState;
-            console.log(`🔗 Current signaling state for ${peerId}: ${currentState}`);
-            
-            // Если мы уже в stable состоянии, значит уже обработали answer
-            if (currentState === 'stable') {
-                console.log(`✅ Already in stable state with ${peerId}, ignoring duplicate answer`);
-                return;
-            }
-            
-            // Если мы в состоянии have-local-offer, то можем установить удаленное описание
-            if (currentState === 'have-local-offer') {
-                try {
-                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                    console.log(`✅ Set remote description (answer) from ${peerId}`);
-                } catch (error) {
-                    // Если ошибка из-за того, что уже установлено, игнорируем
-                    if (error.message.includes('already has a remote description')) {
-                        console.log(`ℹ️ Already has remote description from ${peerId}`);
-                    } else {
-                        console.error(`❌ Error setting remote description from ${peerId}:`, error);
-                    }
-                }
-            } else {
-                console.log(`⚠️ Cannot set remote description in state: ${currentState} for ${peerId}`);
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log(`✅ Set remote description (answer) from ${peerId}`);
+            } catch (error) {
+                console.error(`❌ Error setting remote description from ${peerId}:`, error);
             }
         }
         
@@ -1758,7 +1805,6 @@
             if (!pc) {
                 console.log(`⏳ No peer connection for ${peerId}, caching candidate`);
                 
-                // Кэшируем кандидата для будущего подключения
                 if (!state.pendingCandidates[peerId]) {
                     state.pendingCandidates[peerId] = [];
                 }
@@ -1770,8 +1816,14 @@
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
                 console.log(`✅ Added ICE candidate from ${peerId}`);
             } catch (error) {
-                // Игнорируем некоторые ошибки
-                if (!error.message.includes('already has an ICE candidate')) {
+                // Кэшируем кандидат если remoteDescription еще не установлен
+                if (error.message.includes('remote description was null')) {
+                    console.log(`📦 Caching candidate for ${peerId} (remote desc not set)`);
+                    if (!state.pendingCandidates[peerId]) {
+                        state.pendingCandidates[peerId] = [];
+                    }
+                    state.pendingCandidates[peerId].push(candidate);
+                } else {
                     console.warn(`⚠️ Add ICE candidate warning: ${error.message}`);
                 }
             }
@@ -1782,7 +1834,6 @@
             if (!confirm('Завершить звонок?')) return;
             
             if (state.roomId) {
-                // Отправляем уведомление о выходе
                 try {
                     await fetch(API_URL, {
                         method: 'POST',
@@ -1798,10 +1849,7 @@
                 }
             }
             
-            // Очистка
             cleanup();
-            
-            // Возврат на главный экран
             showScreen('homeScreen');
             document.getElementById('roomCode').value = '';
         }
@@ -1809,11 +1857,10 @@
         function cleanup() {
             console.log('🧹 Cleaning up...');
             
-            // Очистка интервалов
             if (state.updateInterval) clearInterval(state.updateInterval);
             if (state.signalInterval) clearInterval(state.signalInterval);
+            if (state.statsInterval) clearInterval(state.statsInterval);
             
-            // Закрытие соединений
             Object.values(state.peerConnections).forEach(pc => {
                 if (pc) {
                     pc.close();
@@ -1821,13 +1868,11 @@
             });
             state.peerConnections = {};
             
-            // Остановка потока
             if (state.localStream) {
                 state.localStream.getTracks().forEach(track => track.stop());
                 state.localStream = null;
             }
             
-            // Очистка аудио элементов
             const container = document.getElementById('audioContainer');
             if (container) {
                 container.innerHTML = '';
@@ -1835,7 +1880,6 @@
                 document.querySelectorAll('[id^="audio_"]').forEach(el => el.remove());
             }
             
-            // Закрытие аудио контекста
             if (state.audioContext) {
                 state.audioContext.close();
                 state.audioContext = null;
@@ -1850,6 +1894,7 @@
             state.connectionAttempts = {};
             state.lastPollTime = 0;
             state.processedSignals.clear();
+            state.reconnectionAttempts = {};
         }
         
         // Утилиты
@@ -1898,8 +1943,8 @@
             });
         }
         
-        // Предотвращение выключения экрана во время звонка
-        if ('wakeLock' in navigator) {
+        // Предотвращение выключения экрана
+        if ('wakeLock' в navigator) {
             let wakeLock = null;
             
             async function requestWakeLock() {
@@ -1919,14 +1964,12 @@
                 }
             }
             
-            // Запрос блокировки при начале звонка
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible' && state.roomId) {
                     requestWakeLock();
                 }
             });
             
-            // Освобождение при выходе
             window.addEventListener('beforeunload', releaseWakeLock);
         }
         
@@ -1936,7 +1979,6 @@
             e.preventDefault();
             deferredPrompt = e;
             
-            // Показываем предложение установки через 5 секунд
             setTimeout(() => {
                 if (deferredPrompt) {
                     showToast('Установите приложение для быстрого доступа');
