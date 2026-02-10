@@ -744,7 +744,7 @@
         }
         
         function checkSupport() {
-            const supported = 'RTCPeerConnection' window && 'getUserMedia' navigator.mediaDevices;
+            const supported = window.RTCPeerConnection && navigator.mediaDevices.getUserMedia;
             console.log('WebRTC Support Check:', supported);
             return supported;
         }
