@@ -1038,7 +1038,7 @@
             
             btn.classList.toggle('active', state.isSpeaker);
             
-            if (state.isSpeaker && 'setSinkId' HTMLAudioElement.prototype) {
+            if (state.isSpeaker && 'setSinkId' in HTMLAudioElement.prototype) {
                 document.querySelectorAll('audio').forEach(audio => {
                     audio.setSinkId('').catch(console.error);
                 });
