@@ -665,6 +665,7 @@
             audioAnalyzers: {},
             connectionAttempts: {}, // Счетчик попыток подключения
             lastPollTime: 0,
+            processedSignals: new Set(), // Для отслеживания обработанных сигналов
             debugMode: true
         };
         
@@ -1298,6 +1299,23 @@
             
             console.log(`🔗 Creating peer connection to ${peerId}`);
             
+            // Проверяем, не создаем ли мы соединение с самим собой
+            if (peerId === state.userId) {
+                console.log(`⚠️ Cannot create peer connection to self`);
+                return;
+            }
+            
+            // Проверяем, не пытаемся ли мы создать соединение с пользователем, который уже пытается подключиться к нам
+            if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 0) {
+                console.log(`⏳ Already attempting to connect to ${peerId}, waiting...`);
+                return;
+            }
+            
+            if (!state.connectionAttempts[peerId]) {
+                state.connectionAttempts[peerId] = 0;
+            }
+            state.connectionAttempts[peerId]++;
+            
             try {
                 const pc = new RTCPeerConnection(config);
                 state.peerConnections[peerId] = pc;
@@ -1317,7 +1335,7 @@
                 // Обработчики событий
                 pc.onicecandidate = (e) => {
                     if (e.candidate) {
-                        console.log(`❄️ ICE candidate for ${peerId}:`, e.candidate.type);
+                        console.log(`❄️ ICE candidate for ${peerId}: ${e.candidate.type}`);
                         sendSignal(peerId, 'candidate', e.candidate);
                     } else {
                         console.log(`❄️ ICE gathering complete for ${peerId}`);
@@ -1330,9 +1348,10 @@
                 };
                 
                 pc.oniceconnectionstatechange = () => {
-                    console.log(`🔗 ICE state for ${peerId}:`, pc.iceConnectionState);
+                    console.log(`🔗 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
                     if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
                         console.log(`✅ Connected to ${peerId}`);
+                        state.connectionAttempts[peerId] = 0;
                     } else if (pc.iceConnectionState === 'disconnected' || 
                                pc.iceConnectionState === 'failed' ||
                                pc.iceConnectionState === 'closed') {
@@ -1346,21 +1365,32 @@
                     }
                 };
                 
-                // ВСЕГДА создаем offer - убрали условие сравнения ID
-                console.log(`📤 Creating offer for ${peerId}`);
-                try {
-                    const offer = await pc.createOffer({
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: false
-                    });
-                    
-                    console.log(`📤 Setting local description for ${peerId}`);
-                    await pc.setLocalDescription(offer);
-                    console.log(`📤 Sending offer to ${peerId}`);
-                    await sendSignal(peerId, 'offer', offer);
-                    console.log(`✅ Offer sent to ${peerId}`);
-                } catch (error) {
-                    console.error(`❌ Error creating/sending offer to ${peerId}:`, error);
+                pc.onsignalingstatechange = () => {
+                    console.log(`🔗 Signaling state for ${peerId}: ${pc.signalingState}`);
+                };
+                
+                // Создаем offer только если мы инициатор (userId < peerId)
+                const shouldCreateOffer = state.userId < peerId;
+                console.log(`🤔 Should create offer for ${peerId}? ${shouldCreateOffer} (${state.userId} < ${peerId})`);
+                
+                if (shouldCreateOffer) {
+                    console.log(`📤 Creating offer for ${peerId} (we are initiator)`);
+                    try {
+                        const offer = await pc.createOffer({
+                            offerToReceiveAudio: true,
+                            offerToReceiveVideo: false
+                        });
+                        
+                        console.log(`📤 Setting local description for ${peerId}`);
+                        await pc.setLocalDescription(offer);
+                        console.log(`📤 Sending offer to ${peerId}`);
+                        await sendSignal(peerId, 'offer', offer);
+                        console.log(`✅ Offer sent to ${peerId}`);
+                    } catch (error) {
+                        console.error(`❌ Error creating/sending offer to ${peerId}:`, error);
+                    }
+                } else {
+                    console.log(`⏳ Waiting for offer from ${peerId} (they are initiator)`);
                 }
                 
                 // Обрабатываем ожидающие кандидаты
@@ -1523,7 +1553,6 @@
                         state.lastPollTime = Date.now();
                         
                         for (const signal of data.signals) {
-                            console.log(`📨 Processing signal from ${signal.from}, type: ${signal.type}`);
                             await handleSignal(signal);
                         }
                     }
@@ -1534,10 +1563,29 @@
         }
         
         async function handleSignal(signal) {
+            // Создаем уникальный ID для сигнала
+            const signalId = `${signal.from}_${signal.type}_${JSON.stringify(signal.data)}`;
+            
+            // Проверяем, не обрабатывали ли мы уже этот сигнал
+            if (state.processedSignals.has(signalId)) {
+                console.log(`📨 Skipping duplicate signal: ${signalId}`);
+                return;
+            }
+            
+            state.processedSignals.add(signalId);
+            
+            // Очищаем старые сигналы (храним только последние 100)
+            if (state.processedSignals.size > 100) {
+                const first = state.processedSignals.values().next().value;
+                state.processedSignals.delete(first);
+            }
+            
             if (signal.from === state.userId) {
                 console.log(`📨 Ignoring signal from self`);
                 return;
             }
+            
+            console.log(`📨 Processing signal from ${signal.from}, type: ${signal.type}`);
             
             try {
                 switch (signal.type) {
@@ -1594,11 +1642,13 @@
             console.log(`📨 Received offer from ${peerId}`);
             
             let pc = state.peerConnections[peerId];
+            let createdNew = false;
             
             if (!pc) {
                 console.log(`🔗 Creating new peer connection for offer from ${peerId}`);
                 pc = new RTCPeerConnection(config);
                 state.peerConnections[peerId] = pc;
+                createdNew = true;
                 
                 // Настройка обработчиков
                 pc.onicecandidate = (e) => {
@@ -1611,6 +1661,10 @@
                     handleRemoteTrack(e, peerId);
                 };
                 
+                pc.oniceconnectionstatechange = () => {
+                    console.log(`🔗 ICE state for ${peerId}:`, pc.iceConnectionState);
+                };
+                
                 // Добавляем локальный поток
                 if (state.localStream) {
                     state.localStream.getTracks().forEach(track => {
@@ -1621,22 +1675,38 @@
                         }
                     });
                 }
+            } else {
+                console.log(`🔗 Using existing peer connection for offer from ${peerId}`);
             }
             
             try {
+                const currentState = pc.signalingState;
+                console.log(`🔗 Current signaling state before setting remote: ${currentState}`);
+                
+                // Проверяем, не пытаемся ли мы установить offer, когда уже есть локальное описание
+                if (pc.localDescription && pc.localDescription.type === 'offer') {
+                    console.log(`⚠️ We already sent an offer to ${peerId}, ignoring their offer`);
+                    return;
+                }
+                
                 console.log(`🔗 Setting remote description from ${peerId}`);
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 
-                console.log(`🔗 Creating answer for ${peerId}`);
-                const answer = await pc.createAnswer();
-                
-                console.log(`🔗 Setting local description for ${peerId}`);
-                await pc.setLocalDescription(answer);
-                
-                console.log(`📤 Sending answer to ${peerId}`);
-                await sendSignal(peerId, 'answer', answer);
-                
-                console.log(`✅ Answer sent to ${peerId}`);
+                // Создаем answer только если мы создали новое соединение или у нас еще нет локального описания
+                if (createdNew || !pc.localDescription) {
+                    console.log(`🔗 Creating answer for ${peerId}`);
+                    const answer = await pc.createAnswer();
+                    
+                    console.log(`🔗 Setting local description (answer) for ${peerId}`);
+                    await pc.setLocalDescription(answer);
+                    
+                    console.log(`📤 Sending answer to ${peerId}`);
+                    await sendSignal(peerId, 'answer', answer);
+                    
+                    console.log(`✅ Answer sent to ${peerId}`);
+                } else {
+                    console.log(`ℹ️ Already have local description, not creating duplicate answer for ${peerId}`);
+                }
             } catch (error) {
                 console.error(`❌ Error handling offer from ${peerId}:`, error);
             }
@@ -1652,11 +1722,31 @@
                 return;
             }
             
-            try {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                console.log(`✅ Set remote description from ${peerId}`);
-            } catch (error) {
-                console.error(`❌ Error setting remote description from ${peerId}:`, error);
+            // Проверяем текущее состояние соединения
+            const currentState = pc.signalingState;
+            console.log(`🔗 Current signaling state for ${peerId}: ${currentState}`);
+            
+            // Если мы уже в stable состоянии, значит уже обработали answer
+            if (currentState === 'stable') {
+                console.log(`✅ Already in stable state with ${peerId}, ignoring duplicate answer`);
+                return;
+            }
+            
+            // Если мы в состоянии have-local-offer, то можем установить удаленное описание
+            if (currentState === 'have-local-offer') {
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    console.log(`✅ Set remote description (answer) from ${peerId}`);
+                } catch (error) {
+                    // Если ошибка из-за того, что уже установлено, игнорируем
+                    if (error.message.includes('already has a remote description')) {
+                        console.log(`ℹ️ Already has remote description from ${peerId}`);
+                    } else {
+                        console.error(`❌ Error setting remote description from ${peerId}:`, error);
+                    }
+                }
+            } else {
+                console.log(`⚠️ Cannot set remote description in state: ${currentState} for ${peerId}`);
             }
         }
         
@@ -1759,6 +1849,7 @@
             state.pendingCandidates = {};
             state.connectionAttempts = {};
             state.lastPollTime = 0;
+            state.processedSignals.clear();
         }
         
         // Утилиты
