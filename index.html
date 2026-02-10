@@ -630,7 +630,7 @@
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
             
-            // Twilio STUN серверы (без transport параметра)
+            // Twilio STUN серверы (БЕЗ ?transport параметра)
             { urls: 'stun:global.stun.twilio.com:3478' },
             
             // Публичные TURN серверы
@@ -648,17 +648,6 @@
                 urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
-            },
-            // Дополнительные TURN серверы
-            {
-                urls: 'turn:relay1.expressturn.com:3478',
-                username: 'efCQNq5qQNUPqUvM',
-                credential: '7zqS7qDjySdpeyqX'
-            },
-            {
-                urls: 'turn:relay2.expressturn.com:3478',
-                username: 'efCQNq5qQNUPqUvM',
-                credential: '7zqS7qDjySdpeyqX'
             }
         ],
         iceCandidatePoolSize: 10,
