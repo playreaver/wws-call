@@ -228,10 +228,10 @@
             border-radius: 15px;
             padding: 20px;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 15px;
-            transition: all 0.3s ease;
             border: 2px solid transparent;
+            transition: all 0.3s ease;
         }
 
         .participant-card.speaking {
@@ -241,6 +241,12 @@
 
         .participant-card.me {
             background: rgba(102, 126, 234, 0.1);
+        }
+
+        .participant-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
 
         .participant-avatar {
@@ -312,6 +318,37 @@
 
         .kick-btn:active {
             background: rgba(239, 68, 68, 0.3);
+        }
+
+        .participant-volume {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 65px; /* выравнивание под аватаром */
+        }
+
+        .volume-slider {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        .volume-value {
+            min-width: 45px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
         }
 
         /* Call Controls */
@@ -435,6 +472,10 @@
             .end-call-btn {
                 width: 60px;
                 height: 60px;
+            }
+
+            .participant-volume {
+                margin-left: 65px;
             }
         }
 
@@ -630,7 +671,7 @@
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
             
-            // Twilio STUN серверы (БЕЗ ?transport параметра)
+            // Twilio STUN серверы
             { urls: 'stun:global.stun.twilio.com:3478' },
             
             // Публичные TURN серверы
@@ -672,11 +713,13 @@
         pendingCandidates: {},
         audioContext: null,
         audioAnalyzers: {},
+        audioNodes: {}, // Web Audio узлы (source, analyser, gainNode) по peerId
+        volumes: JSON.parse(localStorage.getItem('call_volumes')) || {}, // настройки громкости (>100%)
         connectionAttempts: {},
         lastPollTime: 0,
         processedSignals: new Set(),
-        reconnectionAttempts: {}, // Для отслеживания попыток переподключения
-        statsInterval: null // Для мониторинга соединения
+        reconnectionAttempts: {},
+        statsInterval: null
     };
     
     // Инициализация
@@ -1147,7 +1190,7 @@
             // Создаем новый offer
             const offer = await pc.createOffer({
                 offerToReceiveAudio: true,
-                iceRestart: true // Важно: перезапуск ICE
+                iceRestart: true
             });
             
             await pc.setLocalDescription(offer);
@@ -1266,27 +1309,65 @@
         const initials = getInitials(participant.name || participant.id);
         const color = getColor(participant.id);
         
-        card.innerHTML = `
-            <div class="participant-avatar" style="background: ${color}">
-                ${initials}
+        // Верхняя строка (аватар + информация + кнопка удаления)
+        const row = document.createElement('div');
+        row.className = 'participant-row';
+        
+        // Аватар
+        const avatar = document.createElement('div');
+        avatar.className = 'participant-avatar';
+        avatar.style.background = color;
+        avatar.textContent = initials;
+        
+        // Информация
+        const info = document.createElement('div');
+        info.className = 'participant-info';
+        info.innerHTML = `
+            <div class="participant-name">
+                ${participant.name || participant.id}
+                ${isMe ? ' (Вы)' : ''}
             </div>
-            <div class="participant-info">
-                <div class="participant-name">
-                    ${participant.name || participant.id}
-                    ${isMe ? ' (Вы)' : ''}
-                </div>
-                <div class="participant-status">
-                    <div class="status-indicator ${isSpeaking ? 'speaking' : ''}"></div>
-                    ${isSpeaking ? 'Говорит' : 'В сети'}
-                    ${isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
-                </div>
+            <div class="participant-status">
+                <div class="status-indicator ${isSpeaking ? 'speaking' : ''}"></div>
+                ${isSpeaking ? 'Говорит' : 'В сети'}
+                ${isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
             </div>
-            ${state.roomOwner && !isMe ? `
-                <button class="kick-btn" onclick="kickParticipant('${participant.id}')" title="Удалить участника">
-                    <i class="fas fa-user-slash"></i>
-                </button>
-            ` : ''}
         `;
+        
+        row.appendChild(avatar);
+        row.appendChild(info);
+        
+        // Кнопка удаления (только для создателя и не для себя)
+        if (state.roomOwner && !isMe) {
+            const kickBtn = document.createElement('button');
+            kickBtn.className = 'kick-btn';
+            kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
+            kickBtn.onclick = () => kickParticipant(participant.id);
+            row.appendChild(kickBtn);
+        }
+        
+        card.appendChild(row);
+        
+        // Ползунок громкости (для всех кроме себя)
+        if (!isMe) {
+            const volumeBlock = document.createElement('div');
+            volumeBlock.className = 'participant-volume';
+            const volumeValue = state.volumes[participant.id] || 1;
+            volumeBlock.innerHTML = `
+                <input type="range" min="0" max="3" step="0.1" value="${volumeValue}" 
+                       data-peerid="${participant.id}" class="volume-slider">
+                <span class="volume-value" data-peerid="${participant.id}">${Math.round(volumeValue * 100)}%</span>
+            `;
+            
+            // Обработчик изменения громкости
+            const slider = volumeBlock.querySelector('.volume-slider');
+            slider.addEventListener('input', (e) => {
+                const val = e.target.value;
+                updateVolume(participant.id, val);
+            });
+            
+            card.appendChild(volumeBlock);
+        }
         
         return card;
     }
@@ -1337,7 +1418,7 @@
         }
     }
     
-    // WebRTC соединения - УЛУЧШЕННАЯ ВЕРСИЯ
+    // WebRTC соединения
     async function createPeerConnection(peerId) {
         if (state.peerConnections[peerId]) {
             console.log(`⚠️ Peer connection to ${peerId} already exists`);
@@ -1365,7 +1446,7 @@
             const pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            // Улучшенная обработка потока
+            // Добавляем локальные треки
             if (state.localStream) {
                 state.localStream.getTracks().forEach(track => {
                     try {
@@ -1404,7 +1485,6 @@
                         
                     case 'disconnected':
                         console.log(`⚠️ Disconnected from ${peerId} - attempting to recover`);
-                        // Пытаемся восстановить соединение
                         setTimeout(() => {
                             if (pc.iceConnectionState === 'disconnected') {
                                 console.log(`🔄 Initiating ICE restart for ${peerId}`);
@@ -1415,7 +1495,6 @@
                         
                     case 'failed':
                         console.log(`❌ Connection failed to ${peerId}`);
-                        // Пытаемся переподключиться через некоторое время
                         setTimeout(() => {
                             if (state.participants.some(p => p.id === peerId)) {
                                 console.log(`🔄 Attempting to reconnect to ${peerId}`);
@@ -1497,119 +1576,135 @@
         }
     }
     
+    // Новая обработка удалённого трека с Web Audio (усиление >100%)
     function handleRemoteTrack(event, peerId) {
         console.log(`🎵 Setting up remote track for ${peerId}`);
-        
-        const existingAudio = document.getElementById(`audio_${peerId}`);
-        if (existingAudio) {
-            existingAudio.remove();
-        }
-        
+        const stream = event.streams[0];
+        if (!stream) return;
+    
+        // Удаляем предыдущую обработку для этого участника
+        cleanupAudioNodes(peerId);
+    
+        // Создаём тихий audio-элемент (только для резерва, звук пойдёт через Web Audio)
         const audio = document.createElement('audio');
         audio.id = `audio_${peerId}`;
         audio.autoplay = true;
-        audio.volume = 0.8;
+        audio.volume = 0; // без звука
         audio.style.display = 'none';
-        
-        // Важно: добавляем обработчики ошибок
-        audio.onerror = (e) => {
-            console.error(`🔊 Audio error for ${peerId}:`, e);
-        };
-        
-        if (event.streams && event.streams[0]) {
-            audio.srcObject = event.streams[0];
-            console.log(`🔊 Audio stream set for ${peerId}`);
-            
-            setupSpeechDetector(audio, peerId);
-        }
-        
-        const container = document.getElementById('audioContainer');
-        if (container) {
-            container.appendChild(audio);
-        } else {
-            document.body.appendChild(audio);
-        }
-    }
+        audio.srcObject = stream;
+        document.getElementById('audioContainer').appendChild(audio);
     
-    function setupSpeechDetector(audio, peerId) {
-        if (!window.AudioContext) return;
-        
-        audio.oncanplay = () => {
-            try {
-                if (!state.audioContext) {
-                    state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                
-                const analyser = state.audioContext.createAnalyser();
-                
-                if (audio.srcObject && audio.srcObject instanceof MediaStream) {
-                    const source = state.audioContext.createMediaStreamSource(audio.srcObject);
-                    source.connect(analyser);
-                    
-                    analyser.fftSize = 256;
-                    analyser.smoothingTimeConstant = 0.8;
-                    const data = new Uint8Array(analyser.frequencyBinCount);
-                    
-                    let speakingTimeout = null;
-                    let lastSpeakingState = false;
-                    
-                    function detect() {
-                        if (!state.audioAnalyzers[peerId]) return;
-                        
-                        analyser.getByteFrequencyData(data);
-                        const average = data.reduce((a, b) => a + b) / data.length;
-                        const isSpeaking = average > 20;
-                        
-                        if (isSpeaking !== lastSpeakingState) {
-                            lastSpeakingState = isSpeaking;
-                            state.audioAnalyzers[peerId].speaking = isSpeaking;
-                            state.audioAnalyzers[peerId].lastUpdate = Date.now();
-                            
-                            if (isSpeaking) {
-                                renderParticipants();
-                            } else {
-                                clearTimeout(speakingTimeout);
-                                speakingTimeout = setTimeout(() => {
-                                    renderParticipants();
-                                }, 500);
-                            }
-                        }
-                        
-                        if (state.audioAnalyzers[peerId]) {
-                            requestAnimationFrame(detect);
-                        }
-                    }
-                    
-                    state.audioAnalyzers[peerId] = {
-                        analyser: analyser,
-                        speaking: false,
-                        lastUpdate: Date.now(),
-                        detect: detect
-                    };
-                    
-                    detect();
-                }
-            } catch (error) {
-                console.error('Speech detector error:', error);
+        // Создаём Web Audio цепочку
+        if (!state.audioContext) {
+            state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            // Возобновляем контекст, если он был приостановлен
+            if (state.audioContext.state === 'suspended') {
+                state.audioContext.resume();
             }
-        };
+        }
+    
+        const source = state.audioContext.createMediaStreamSource(stream);
+        const analyser = state.audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+    
+        const gainNode = state.audioContext.createGain();
+        // Устанавливаем сохранённую громкость (по умолчанию 1 = 100%)
+        const savedVolume = state.volumes[peerId] || 1;
+        gainNode.gain.value = savedVolume;
+    
+        // Подключаем: source -> analyser -> gainNode -> destination
+        source.connect(analyser);
+        analyser.connect(gainNode);
+        gainNode.connect(state.audioContext.destination);
+    
+        // Сохраняем узлы
+        state.audioNodes[peerId] = { source, analyser, gainNode };
+    
+        // Запускаем детектор речи на analyser (до усиления, чтобы индикатор был объективным)
+        setupSpeechDetection(analyser, peerId);
     }
     
+    // Очистка Web Audio узлов для участника
+    function cleanupAudioNodes(peerId) {
+        const nodes = state.audioNodes[peerId];
+        if (nodes) {
+            try {
+                nodes.source.disconnect();
+                nodes.analyser.disconnect();
+                nodes.gainNode.disconnect();
+            } catch (e) {}
+            delete state.audioNodes[peerId];
+        }
+        // Удаляем audio элемент
+        const audio = document.getElementById(`audio_${peerId}`);
+        if (audio) audio.remove();
+        
+        // Удаляем из анализаторов речи
+        if (state.audioAnalyzers[peerId]) {
+            delete state.audioAnalyzers[peerId];
+        }
+    }
+    
+    // Детектор речи на основе AnalyserNode
+    function setupSpeechDetection(analyser, peerId) {
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        let speakingTimeout = null;
+        let lastSpeakingState = false;
+    
+        function detect() {
+            if (!state.audioNodes[peerId]) return; // узел удалён
+    
+            analyser.getByteFrequencyData(data);
+            const average = data.reduce((a, b) => a + b) / data.length;
+            const isSpeaking = average > 20;
+    
+            if (isSpeaking !== lastSpeakingState) {
+                lastSpeakingState = isSpeaking;
+                if (!state.audioAnalyzers) state.audioAnalyzers = {};
+                state.audioAnalyzers[peerId] = { speaking: isSpeaking, lastUpdate: Date.now() };
+    
+                if (isSpeaking) {
+                    renderParticipants();
+                } else {
+                    clearTimeout(speakingTimeout);
+                    speakingTimeout = setTimeout(() => {
+                        renderParticipants();
+                    }, 500);
+                }
+            }
+    
+            requestAnimationFrame(detect);
+        }
+    
+        detect();
+    }
+    
+    // Обновление громкости для участника
+    function updateVolume(peerId, value) {
+        value = parseFloat(value);
+        state.volumes[peerId] = value;
+        localStorage.setItem('call_volumes', JSON.stringify(state.volumes));
+        
+        const nodes = state.audioNodes[peerId];
+        if (nodes) {
+            nodes.gainNode.gain.value = value;
+        }
+        
+        // Обновить отображение процентов в карточке
+        const volumeSpan = document.querySelector(`.volume-value[data-peerid="${peerId}"]`);
+        if (volumeSpan) {
+            volumeSpan.textContent = Math.round(value * 100) + '%';
+        }
+    }
+    
+    // Очистка соединения с участником
     function cleanupPeerConnection(peerId) {
         if (state.peerConnections[peerId]) {
             state.peerConnections[peerId].close();
             delete state.peerConnections[peerId];
         }
-        
-        if (state.audioAnalyzers[peerId]) {
-            delete state.audioAnalyzers[peerId];
-        }
-        
-        const audio = document.getElementById(`audio_${peerId}`);
-        if (audio) {
-            audio.remove();
-        }
-        
+        cleanupAudioNodes(peerId);
         console.log(`🧹 Cleaned up peer connection to ${peerId}`);
     }
     
@@ -1846,11 +1941,14 @@
         if (state.statsInterval) clearInterval(state.statsInterval);
         
         Object.values(state.peerConnections).forEach(pc => {
-            if (pc) {
-                pc.close();
-            }
+            if (pc) pc.close();
         });
         state.peerConnections = {};
+        
+        // Очищаем все Web Audio узлы
+        Object.keys(state.audioNodes).forEach(peerId => cleanupAudioNodes(peerId));
+        state.audioNodes = {};
+        state.audioAnalyzers = {};
         
         if (state.localStream) {
             state.localStream.getTracks().forEach(track => track.stop());
@@ -1858,11 +1956,7 @@
         }
         
         const container = document.getElementById('audioContainer');
-        if (container) {
-            container.innerHTML = '';
-        } else {
-            document.querySelectorAll('[id^="audio_"]').forEach(el => el.remove());
-        }
+        if (container) container.innerHTML = '';
         
         if (state.audioContext) {
             state.audioContext.close();
@@ -1872,8 +1966,6 @@
         // Сброс состояния
         state.roomId = null;
         state.roomOwner = false;
-        state.audioAnalyzers = {};
-        state.participants = [];
         state.pendingCandidates = {};
         state.connectionAttempts = {};
         state.lastPollTime = 0;
@@ -1956,6 +2048,13 @@
         
         window.addEventListener('beforeunload', releaseWakeLock);
     }
+    
+    // Возобновление AudioContext при возвращении на страницу
+    document.addEventListener('visibilitychange', () => {
+        if (state.audioContext && document.visibilityState === 'visible') {
+            state.audioContext.resume();
+        }
+    });
     
     // PWA установка
     let deferredPrompt;
