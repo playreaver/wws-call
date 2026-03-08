@@ -685,13 +685,9 @@
                 credential: 'openrelayproject'
             }
         ],
-        iceCandidatePoolSize: 10,
-        iceTransportPolicy: 'all',
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
+        iceCandidatePoolSize: 10
     };
     
-    // Состояние приложения
     const state = {
         userId: null,
         userName: null,
@@ -700,24 +696,17 @@
         localStream: null,
         peerConnections: {},
         isMuted: true,
-        isSpeaker: false,
         signalInterval: null,
         updateInterval: null,
         participants: [],
         pendingCandidates: {},
-        audioContext: null,
-        audioAnalyzers: {},
-        audioNodes: {},
         volumes: JSON.parse(localStorage.getItem('call_volumes')) || {},
         connectionAttempts: {},
         lastPollTime: 0,
         processedSignals: new Set(),
-        reconnectionAttempts: {},
-        statsInterval: null,
-        signalRetryCount: {} // Счетчик повторных отправок сигналов
+        audioElements: {} // Храним audio элементы
     };
     
-    // Инициализация
     document.addEventListener('DOMContentLoaded', init);
     
     async function init() {
@@ -735,11 +724,7 @@
             return;
         }
     
-        const connected = await checkConnection();
-        
-        if (!connected) {
-            showToast('Проверьте подключение к интернету', 3000);
-        }
+        await checkConnection();
         
         setTimeout(() => {
             document.getElementById('loading').style.display = 'none';
@@ -747,9 +732,8 @@
     }
     
     function generateName() {
-        const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария', 'Екатерина', 'Ольга', 'Татьяна', 'Наталья'];
-        const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов', 'Новиков', 'Морозов'];
-        
+        const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария'];
+        const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов'];
         return `${names[Math.floor(Math.random() * names.length)]} ${surnames[Math.floor(Math.random() * surnames.length)]}`;
     }
     
@@ -764,7 +748,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'ping' })
             });
-            
             updateConnectionStatus(response.ok);
             return response.ok;
         } catch (error) {
@@ -796,10 +779,7 @@
         
         toast.textContent = message;
         toast.classList.add('show');
-        
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, duration);
+        setTimeout(() => toast.classList.remove('show'), duration);
     }
     
     async function createRoom() {
@@ -807,13 +787,7 @@
         
         try {
             if (!state.localStream) {
-                try {
-                    await requestMicrophonePermission();
-                } catch (error) {
-                    showToast('Не удалось получить доступ к микрофону');
-                    hideLoading();
-                    return;
-                }
+                await requestMicrophonePermission();
             }
             
             const response = await fetch(API_URL, {
@@ -834,10 +808,9 @@
                 await startCall();
                 showToast('Звонок создан! Код скопирован');
             } else {
-                throw new Error(data.error || 'Ошибка создания');
+                throw new Error(data.error);
             }
         } catch (error) {
-            console.error('Create room error:', error);
             showToast('Ошибка создания звонка');
         } finally {
             hideLoading();
@@ -848,7 +821,7 @@
         const code = document.getElementById('roomCode').value.trim().toUpperCase();
         
         if (!code || code.length !== 6) {
-            showToast('Введите 6-значный код звонка');
+            showToast('Введите 6-значный код');
             return;
         }
     
@@ -856,13 +829,7 @@
         
         try {
             if (!state.localStream) {
-                try {
-                    await requestMicrophonePermission();
-                } catch (error) {
-                    showToast('Не удалось получить доступ к микрофону');
-                    hideLoading();
-                    return;
-                }
+                await requestMicrophonePermission();
             }
             
             const response = await fetch(API_URL, {
@@ -884,10 +851,9 @@
                 await startCall();
                 showToast('Присоединились к звонку');
             } else {
-                throw new Error(data.error || 'Комната не найдена');
+                throw new Error(data.error);
             }
         } catch (error) {
-            console.error('Join room error:', error);
             showToast('Ошибка присоединения');
         } finally {
             hideLoading();
@@ -900,31 +866,23 @@
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true,
-                    channelCount: 1
+                    autoGainControl: true
                 },
                 video: false
             });
             
             state.isMuted = false;
-            state.localStream.getAudioTracks().forEach(track => {
-                track.enabled = true;
-            });
+            state.localStream.getAudioTracks().forEach(track => track.enabled = true);
             updateMicUI();
             
             return state.localStream;
         } catch (error) {
-            console.error('Microphone permission error:', error);
-            
             let errorMessage = 'Ошибка доступа к микрофону';
             if (error.name === 'NotAllowedError') {
                 errorMessage = 'Доступ к микрофону отклонен';
             } else if (error.name === 'NotFoundError') {
                 errorMessage = 'Микрофон не найден';
-            } else if (error.name === 'NotReadableError') {
-                errorMessage = 'Микрофон уже используется';
             }
-            
             showToast(errorMessage, 5000);
             throw error;
         }
@@ -944,8 +902,12 @@
             startUpdates();
             await updateParticipants();
             
+            // ВАЖНО: Разрешаем аудио контекст после взаимодействия с пользователем
+            if (state.audioContext) {
+                await state.audioContext.resume();
+            }
+            
         } catch (error) {
-            console.error('Start call error:', error);
             showToast('Ошибка начала звонка');
             showScreen('homeScreen');
         }
@@ -961,9 +923,6 @@
             requestMicrophonePermission().then(() => {
                 state.isMuted = false;
                 updateMicUI();
-                showToast('Микрофон включен', 1500);
-            }).catch(() => {
-                showToast('Не удалось получить доступ к микрофону');
             });
             return;
         }
@@ -975,11 +934,6 @@
         
         updateMicUI();
         showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
-        
-        // Отправляем статус всем
-        Object.keys(state.peerConnections).forEach(peerId => {
-            sendSignal(peerId, 'audioStatus', { muted: state.isMuted });
-        });
     }
     
     function updateMicUI() {
@@ -990,23 +944,6 @@
         btn.innerHTML = state.isMuted ? 
             '<i class="fas fa-microphone-slash"></i>' : 
             '<i class="fas fa-microphone"></i>';
-    }
-    
-    function toggleSpeaker() {
-        state.isSpeaker = !state.isSpeaker;
-        
-        const btn = document.getElementById('speakerBtn');
-        if (!btn) return;
-        
-        btn.classList.toggle('active', state.isSpeaker);
-        
-        if (state.isSpeaker && 'setSinkId' in HTMLAudioElement.prototype) {
-            document.querySelectorAll('audio').forEach(audio => {
-                audio.setSinkId('').catch(console.error);
-            });
-        }
-        
-        showToast(state.isSpeaker ? 'Основной динамик' : 'Стандартный', 1500);
     }
     
     async function copyRoomCode() {
@@ -1037,9 +974,7 @@
                     url: window.location.href
                 });
             } catch (error) {
-                if (error.name !== 'AbortError') {
-                    copyRoomCode();
-                }
+                if (error.name !== 'AbortError') copyRoomCode();
             }
         } else {
             copyRoomCode();
@@ -1049,78 +984,14 @@
     function startUpdates() {
         if (state.updateInterval) clearInterval(state.updateInterval);
         if (state.signalInterval) clearInterval(state.signalInterval);
-        if (state.statsInterval) clearInterval(state.statsInterval);
         
-        // Обновление списка участников каждые 2 секунды
-        state.updateInterval = setInterval(() => {
-            updateParticipants();
-        }, 2000);
-        
-        // Получение сигналов каждую секунду
-        state.signalInterval = setInterval(() => {
-            pollSignals();
-        }, 1000);
-        
-        // Проверка подключения
-        setInterval(() => {
-            checkConnection();
-        }, 30000);
-        
-        // Мониторинг соединений
-        state.statsInterval = setInterval(() => {
-            monitorConnections();
-        }, 10000);
+        state.updateInterval = setInterval(updateParticipants, 2000);
+        state.signalInterval = setInterval(pollSignals, 1000);
         
         setTimeout(() => {
             updateParticipants();
             pollSignals();
         }, 500);
-    }
-    
-    async function monitorConnections() {
-        Object.keys(state.peerConnections).forEach(async (peerId) => {
-            const pc = state.peerConnections[peerId];
-            if (!pc) return;
-            
-            console.log(`📊 ${peerId}: ICE=${pc.iceConnectionState}, Signaling=${pc.signalingState}`);
-            
-            // Если соединение не устанавливается долго, пробуем переподключиться
-            if (pc.iceConnectionState === 'new' && pc.signalingState === 'have-local-offer') {
-                const waitTime = Date.now() - (state.connectionStartTime?.[peerId] || 0);
-                if (waitTime > 10000) {
-                    console.log(`🔄 Connection timeout for ${peerId}, restarting...`);
-                    attemptIceRestart(pc, peerId);
-                }
-            }
-            
-            if (pc.iceConnectionState === 'disconnected') {
-                if (!state.reconnectionAttempts[peerId]) {
-                    state.reconnectionAttempts[peerId] = { startTime: Date.now(), attempts: 0 };
-                }
-                
-                const disconnectedTime = Date.now() - state.reconnectionAttempts[peerId].startTime;
-                if (disconnectedTime > 30000 && state.reconnectionAttempts[peerId].attempts < 3) {
-                    state.reconnectionAttempts[peerId].attempts++;
-                    attemptIceRestart(pc, peerId);
-                }
-            } else if (pc.iceConnectionState === 'connected') {
-                delete state.reconnectionAttempts[peerId];
-            }
-        });
-    }
-    
-    async function attemptIceRestart(pc, peerId) {
-        try {
-            console.log(`🔄 ICE restart for ${peerId}`);
-            const offer = await pc.createOffer({ 
-                iceRestart: true,
-                offerToReceiveAudio: true 
-            });
-            await pc.setLocalDescription(offer);
-            await sendSignal(peerId, 'offer', offer);
-        } catch (error) {
-            console.error(`❌ ICE restart failed for ${peerId}:`, error);
-        }
     }
     
     async function updateParticipants() {
@@ -1153,7 +1024,7 @@
                 }
             }
         } catch (error) {
-            console.error('Update participants error:', error);
+            console.error('Update error:', error);
         }
     }
     
@@ -1165,14 +1036,13 @@
         );
         
         newParticipants.forEach(peerId => {
-            console.log('🤝 Connecting to new participant:', peerId);
+            console.log('🤝 Connecting to:', peerId);
             createPeerConnection(peerId);
         });
         
-        // Чистим старые соединения
+        // Clean up old connections
         Object.keys(state.peerConnections).forEach(peerId => {
             if (!newList.includes(peerId) && peerId !== state.userId) {
-                console.log('👋 Cleaning up:', peerId);
                 cleanupPeerConnection(peerId);
             }
         });
@@ -1185,95 +1055,55 @@
         container.innerHTML = '';
         
         if (state.participants.length === 0) {
-            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-users" style="font-size: 48px; margin-bottom: 20px;"></i><p>Ожидание участников...</p></div>';
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-users" style="font-size: 48px;"></i><p>Ожидание участников...</p></div>';
             return;
         }
         
-        const sortedParticipants = [...state.participants].sort((a, b) => {
-            if (a.isOwner && !b.isOwner) return -1;
-            if (!a.isOwner && b.isOwner) return 1;
-            return 0;
-        });
-        
-        sortedParticipants.forEach(p => {
+        state.participants.forEach(p => {
             container.appendChild(createParticipantCard(p));
         });
     }
     
     function createParticipantCard(participant) {
         const isMe = participant.id === state.userId;
-        const isOwner = participant.isOwner;
-        const isSpeaking = state.audioAnalyzers[participant.id]?.speaking || false;
-        
         const card = document.createElement('div');
-        card.className = `participant-card ${isSpeaking ? 'speaking' : ''} ${isMe ? 'me' : ''}`;
-        
-        const initials = getInitials(participant.name || participant.id);
-        const color = getColor(participant.id);
+        card.className = `participant-card ${isMe ? 'me' : ''}`;
         
         const row = document.createElement('div');
         row.className = 'participant-row';
         
         const avatar = document.createElement('div');
         avatar.className = 'participant-avatar';
-        avatar.style.background = color;
-        avatar.textContent = initials;
+        avatar.style.background = getColor(participant.id);
+        avatar.textContent = getInitials(participant.name || participant.id);
         
         const info = document.createElement('div');
         info.className = 'participant-info';
         info.innerHTML = `
             <div class="participant-name">
-                ${participant.name || participant.id}
-                ${isMe ? ' (Вы)' : ''}
+                ${participant.name || participant.id} ${isMe ? '(Вы)' : ''}
             </div>
             <div class="participant-status">
-                <div class="status-indicator ${isSpeaking ? 'speaking' : ''}"></div>
-                ${isSpeaking ? 'Говорит' : 'В сети'}
-                ${isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
+                <div class="status-indicator"></div>
+                В сети
+                ${participant.isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
             </div>
         `;
         
         row.appendChild(avatar);
         row.appendChild(info);
-        
-        if (state.roomOwner && !isMe) {
-            const kickBtn = document.createElement('button');
-            kickBtn.className = 'kick-btn';
-            kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
-            kickBtn.onclick = () => kickParticipant(participant.id);
-            row.appendChild(kickBtn);
-        }
-        
         card.appendChild(row);
-        
-        if (!isMe) {
-            const volumeBlock = document.createElement('div');
-            volumeBlock.className = 'participant-volume';
-            const volumeValue = state.volumes[participant.id] || 1;
-            volumeBlock.innerHTML = `
-                <input type="range" min="0" max="3" step="0.1" value="${volumeValue}" 
-                       data-peerid="${participant.id}" class="volume-slider">
-                <span class="volume-value" data-peerid="${participant.id}">${Math.round(volumeValue * 100)}%</span>
-            `;
-            
-            const slider = volumeBlock.querySelector('.volume-slider');
-            slider.addEventListener('input', (e) => {
-                updateVolume(participant.id, e.target.value);
-            });
-            
-            card.appendChild(volumeBlock);
-        }
         
         return card;
     }
     
     function getInitials(name) {
         const words = name.split(' ');
-        return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
+        return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.substring(0, 2);
     }
     
     function getColor(id) {
-        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'];
+        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff'];
         let hash = 0;
         for (let i = 0; i < id.length; i++) {
             hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -1281,141 +1111,103 @@
         return colors[Math.abs(hash) % colors.length];
     }
     
-    async function kickParticipant(participantId) {
-        if (!confirm('Удалить участника?')) return;
-        
-        try {
-            await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'kickParticipant',
-                    roomId: state.roomId,
-                    userId: state.userId,
-                    participantId
-                })
-            });
-            showToast('Участник удален');
-        } catch (error) {
-            showToast('Ошибка удаления');
-        }
-    }
-    
     // ИСПРАВЛЕННАЯ функция создания peer connection
     async function createPeerConnection(peerId) {
-        if (state.peerConnections[peerId]) {
-            console.log(`⚠️ Connection to ${peerId} already exists`);
-            return;
-        }
+        if (state.peerConnections[peerId]) return;
         
         console.log(`🔗 Creating connection to ${peerId}`);
-        
-        if (!state.connectionStartTime) state.connectionStartTime = {};
-        state.connectionStartTime[peerId] = Date.now();
         
         try {
             const pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            // Добавляем треки
+            // Добавляем локальные треки
             if (state.localStream) {
                 state.localStream.getTracks().forEach(track => {
-                    try {
-                        pc.addTrack(track, state.localStream);
-                        console.log(`🔗 Added ${track.kind} track`);
-                    } catch (error) {
-                        console.error('Error adding track:', error);
-                    }
+                    pc.addTrack(track, state.localStream);
                 });
             }
             
             // ICE candidates
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
-                    console.log(`❄️ ICE candidate: ${e.candidate.type}`);
                     sendSignal(peerId, 'candidate', e.candidate);
                 }
             };
             
-            // Remote track
+            // Получение удаленного потока - ИСПРАВЛЕНО
             pc.ontrack = (e) => {
                 console.log(`🎵 Received track from ${peerId}`);
-                handleRemoteTrack(e, peerId);
+                const stream = e.streams[0];
+                if (!stream) return;
+                
+                // Создаем и настраиваем audio элемент
+                const audioId = `audio_${peerId}`;
+                let audio = document.getElementById(audioId);
+                
+                if (!audio) {
+                    audio = document.createElement('audio');
+                    audio.id = audioId;
+                    audio.autoplay = true;
+                    audio.controls = false;
+                    audio.style.display = 'none';
+                    document.getElementById('audioContainer').appendChild(audio);
+                }
+                
+                audio.srcObject = stream;
+                
+                // ВАЖНО: Принудительно воспроизводим
+                audio.play().then(() => {
+                    console.log(`✅ Audio playing for ${peerId}`);
+                    
+                    // Устанавливаем сохраненную громкость
+                    const volume = state.volumes[peerId] || 1;
+                    audio.volume = volume;
+                    
+                }).catch(err => {
+                    console.log(`⚠️ Audio play error:`, err);
+                    // Для Chrome: нужно взаимодействие с пользователем
+                    showToast('Нажмите на экран для включения звука', 3000);
+                    
+                    // Добавляем обработчик клика для включения звука
+                    const enableAudio = () => {
+                        audio.play();
+                        document.removeEventListener('click', enableAudio);
+                    };
+                    document.addEventListener('click', enableAudio, { once: true });
+                });
+                
+                state.audioElements[peerId] = audio;
             };
             
             // Connection state
             pc.oniceconnectionstatechange = () => {
-                console.log(`🔗 ICE state for ${peerId}: ${pc.iceConnectionState}`);
-                
+                console.log(`🔗 ICE state: ${pc.iceConnectionState}`);
                 if (pc.iceConnectionState === 'connected') {
                     console.log(`✅ Connected to ${peerId}`);
-                    showToast(`Подключен к ${participantName(peerId)}`);
                 }
             };
             
-            // ВАЖНО: Отправляем offer сразу после создания
-            setTimeout(async () => {
-                try {
-                    const currentPc = state.peerConnections[peerId];
-                    if (!currentPc) return;
-                    
-                    console.log(`📤 Creating offer for ${peerId}`);
-                    
-                    const offer = await currentPc.createOffer({
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: false
-                    });
-                    
-                    await currentPc.setLocalDescription(offer);
-                    
-                    // Отправляем offer несколько раз для надежности
-                    await sendSignal(peerId, 'offer', offer);
-                    setTimeout(() => sendSignal(peerId, 'offer', offer), 1000);
-                    setTimeout(() => sendSignal(peerId, 'offer', offer), 3000);
-                    
-                    console.log(`✅ Offer sent to ${peerId}`);
-                    
-                } catch (error) {
-                    console.error(`❌ Error creating offer:`, error);
-                }
-            }, 500);
+            // Определяем инициатора
+            if (state.userId < peerId) {
+                setTimeout(async () => {
+                    try {
+                        const offer = await pc.createOffer({
+                            offerToReceiveAudio: true,
+                            offerToReceiveVideo: false
+                        });
+                        await pc.setLocalDescription(offer);
+                        await sendSignal(peerId, 'offer', offer);
+                        console.log(`✅ Offer sent to ${peerId}`);
+                    } catch (error) {
+                        console.error(`❌ Offer error:`, error);
+                    }
+                }, 500);
+            }
             
         } catch (error) {
-            console.error(`❌ Create connection error:`, error);
-            cleanupPeerConnection(peerId);
+            console.error(`❌ Connection error:`, error);
         }
-    }
-    
-    function participantName(peerId) {
-        const p = state.participants.find(p => p.id === peerId);
-        return p ? p.name : peerId.substring(0, 8);
-    }
-    
-    function handleRemoteTrack(event, peerId) {
-        console.log(`🎵 Setting up audio for ${peerId}`);
-        const stream = event.streams[0];
-        if (!stream) return;
-    
-        cleanupAudioNodes(peerId);
-    
-        // Создаем audio элемент
-        const audio = document.createElement('audio');
-        audio.id = `audio_${peerId}`;
-        audio.autoplay = true;
-        audio.volume = 1; // Включаем звук
-        audio.style.display = 'none';
-        audio.srcObject = stream;
-        document.getElementById('audioContainer').appendChild(audio);
-        
-        // Воспроизводим
-        audio.play().catch(e => console.log('Audio play error:', e));
-        
-        console.log(`✅ Audio setup complete for ${peerId}`);
-    }
-    
-    function cleanupAudioNodes(peerId) {
-        const audio = document.getElementById(`audio_${peerId}`);
-        if (audio) audio.remove();
     }
     
     function cleanupPeerConnection(peerId) {
@@ -1423,10 +1215,13 @@
             state.peerConnections[peerId].close();
             delete state.peerConnections[peerId];
         }
-        cleanupAudioNodes(peerId);
+        
+        const audio = document.getElementById(`audio_${peerId}`);
+        if (audio) audio.remove();
+        
+        delete state.audioElements[peerId];
     }
     
-    // ИСПРАВЛЕННАЯ функция получения сигналов
     async function pollSignals() {
         if (!state.roomId) return;
         
@@ -1444,7 +1239,7 @@
     
             if (response.ok) {
                 const data = await response.json();
-                if (data.success && data.signals && data.signals.length > 0) {
+                if (data.success && data.signals?.length > 0) {
                     console.log(`📡 Received ${data.signals.length} signals`);
                     state.lastPollTime = Date.now();
                     
@@ -1454,23 +1249,18 @@
                 }
             }
         } catch (error) {
-            console.error('Poll signals error:', error);
+            console.error('Poll error:', error);
         }
     }
     
     async function handleSignal(signal) {
         const signalId = `${signal.from}_${signal.type}_${Date.now()}`;
-        
         if (state.processedSignals.has(signalId)) return;
         state.processedSignals.add(signalId);
         
-        if (state.processedSignals.size > 100) {
-            state.processedSignals.delete(state.processedSignals.values().next().value);
-        }
-        
         if (signal.from === state.userId) return;
         
-        console.log(`📨 Processing ${signal.type} from ${signal.from}`);
+        console.log(`📨 ${signal.type} from ${signal.from}`);
         
         try {
             switch (signal.type) {
@@ -1485,7 +1275,7 @@
                     break;
             }
         } catch (error) {
-            console.error(`Error handling signal:`, error);
+            console.error(`Signal error:`, error);
         }
     }
     
@@ -1504,17 +1294,16 @@
                 })
             });
         } catch (error) {
-            console.error('Send signal error:', error);
+            console.error('Send error:', error);
         }
     }
     
     async function handleOffer(peerId, offer) {
-        console.log(`📨 Handling offer from ${peerId}`);
+        console.log(`📨 Handling offer`);
         
         let pc = state.peerConnections[peerId];
         
         if (!pc) {
-            console.log(`🔗 Creating new connection for offer`);
             pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
@@ -1531,7 +1320,28 @@
             };
             
             pc.ontrack = (e) => {
-                handleRemoteTrack(e, peerId);
+                console.log(`🎵 Received track from ${peerId}`);
+                const stream = e.streams[0];
+                if (!stream) return;
+                
+                const audioId = `audio_${peerId}`;
+                let audio = document.getElementById(audioId);
+                
+                if (!audio) {
+                    audio = document.createElement('audio');
+                    audio.id = audioId;
+                    audio.autoplay = true;
+                    audio.style.display = 'none';
+                    document.getElementById('audioContainer').appendChild(audio);
+                }
+                
+                audio.srcObject = stream;
+                audio.play().catch(err => {
+                    console.log('Play error:', err);
+                    document.addEventListener('click', () => audio.play(), { once: true });
+                });
+                
+                state.audioElements[peerId] = audio;
             };
         }
         
@@ -1542,15 +1352,11 @@
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             
-            // Отправляем answer несколько раз
             await sendSignal(peerId, 'answer', answer);
-            setTimeout(() => sendSignal(peerId, 'answer', answer), 1000);
-            
-            console.log(`✅ Answer sent to ${peerId}`);
+            console.log(`✅ Answer sent`);
             
             // Добавляем отложенные кандидаты
             if (state.pendingCandidates[peerId]) {
-                console.log(`🔗 Adding ${state.pendingCandidates[peerId].length} pending candidates`);
                 for (const candidate of state.pendingCandidates[peerId]) {
                     try {
                         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1560,21 +1366,26 @@
             }
             
         } catch (error) {
-            console.error(`Error handling offer:`, error);
+            console.error(`Offer error:`, error);
         }
     }
     
     async function handleAnswer(peerId, answer) {
-        console.log(`📨 Handling answer from ${peerId}`);
+        console.log(`📨 Handling answer`);
         
         const pc = state.peerConnections[peerId];
         if (!pc) return;
         
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            console.log(`✅ Remote description set from answer`);
+            // ИСПРАВЛЕНИЕ: Проверяем состояние перед установкой answer
+            if (pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log(`✅ Remote description set from answer`);
+            } else {
+                console.log(`⏳ Ignoring answer in state: ${pc.signalingState}`);
+            }
         } catch (error) {
-            console.error(`Error handling answer:`, error);
+            console.error(`Answer error:`, error);
         }
     }
     
@@ -1592,18 +1403,7 @@
         try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (error) {
-            console.warn(`Add candidate warning:`, error.message);
-        }
-    }
-    
-    function updateVolume(peerId, value) {
-        value = parseFloat(value);
-        state.volumes[peerId] = value;
-        localStorage.setItem('call_volumes', JSON.stringify(state.volumes));
-        
-        const volumeSpan = document.querySelector(`.volume-value[data-peerid="${peerId}"]`);
-        if (volumeSpan) {
-            volumeSpan.textContent = Math.round(value * 100) + '%';
+            console.warn(`Candidate error:`, error.message);
         }
     }
     
@@ -1632,12 +1432,12 @@
     function cleanup() {
         if (state.updateInterval) clearInterval(state.updateInterval);
         if (state.signalInterval) clearInterval(state.signalInterval);
-        if (state.statsInterval) clearInterval(state.statsInterval);
         
         Object.values(state.peerConnections).forEach(pc => pc.close());
         state.peerConnections = {};
         
         document.getElementById('audioContainer').innerHTML = '';
+        state.audioElements = {};
         
         if (state.localStream) {
             state.localStream.getTracks().forEach(track => track.stop());
@@ -1659,6 +1459,21 @@
         document.getElementById('loading').style.display = 'none';
     }
     
+    // Обработка ввода кода
+    document.getElementById('roomCode')?.addEventListener('input', function() {
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
+    });
+    
+    // Глобальный обработчик для включения звука
+    document.addEventListener('click', () => {
+        // Включаем все audio элементы при клике
+        Object.values(state.audioElements).forEach(audio => {
+            if (audio.paused) {
+                audio.play().catch(() => {});
+            }
+        });
+    }, { once: true });
+    
     // Горячие клавиши
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && state.roomId) leaveRoom();
@@ -1667,42 +1482,6 @@
             e.preventDefault();
         }
     });
-    
-    // Обработка ввода кода
-    const roomCodeInput = document.getElementById('roomCode');
-    if (roomCodeInput) {
-        roomCodeInput.addEventListener('input', function() {
-            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
-        });
-    }
-    
-    // Wake Lock
-    if ('wakeLock' in navigator) {
-        let wakeLock = null;
-        
-        async function requestWakeLock() {
-            try {
-                if (!wakeLock && state.roomId) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                }
-            } catch (err) {}
-        }
-        
-        function releaseWakeLock() {
-            if (wakeLock) {
-                wakeLock.release();
-                wakeLock = null;
-            }
-        }
-        
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && state.roomId) {
-                requestWakeLock();
-            }
-        });
-        
-        window.addEventListener('beforeunload', releaseWakeLock);
-    }
 </script>
 </body>
 </html>
