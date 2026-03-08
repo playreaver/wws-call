@@ -1432,7 +1432,7 @@
             return;
         }
         
-        if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 2) {
+        if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 3) {
             console.log(`⏳ Too many connection attempts to ${peerId}`);
             return;
         }
@@ -1445,6 +1445,9 @@
         try {
             const pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
+            
+            // Флаг для предотвращения множественных переговоров
+            let isNegotiating = false;
             
             // Добавляем локальные треки
             if (state.localStream) {
@@ -1481,12 +1484,13 @@
                     case 'completed':
                         console.log(`✅ Connected to ${peerId}`);
                         state.connectionAttempts[peerId] = 0;
+                        isNegotiating = false;
                         break;
                         
                     case 'disconnected':
                         console.log(`⚠️ Disconnected from ${peerId} - attempting to recover`);
                         setTimeout(() => {
-                            if (pc.iceConnectionState === 'disconnected') {
+                            if (pc.iceConnectionState === 'disconnected' && state.participants.some(p => p.id === peerId)) {
                                 console.log(`🔄 Initiating ICE restart for ${peerId}`);
                                 attemptIceRestart(pc, peerId);
                             }
@@ -1511,14 +1515,42 @@
                 }
             };
             
+            // ИСПРАВЛЕНИЕ: Улучшенный обработчик negotiationneeded
             pc.onnegotiationneeded = async () => {
-                console.log(`🔄 Negotiation needed for ${peerId}`);
+                // Предотвращаем множественные переговоры
+                if (isNegotiating) {
+                    console.log(`⏳ Negotiation already in progress for ${peerId}, skipping`);
+                    return;
+                }
+                
+                // Проверяем состояние signalingState
+                if (pc.signalingState !== 'stable') {
+                    console.log(`⏳ Signaling state is ${pc.signalingState}, delaying negotiation for ${peerId}`);
+                    return;
+                }
+                
+                console.log(`🔄 Starting negotiation for ${peerId}`);
+                isNegotiating = true;
+                
                 try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    await sendSignal(peerId, 'offer', offer);
+                    const offer = await pc.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: false,
+                        iceRestart: false
+                    });
+                    
+                    // Проверяем, не изменилось ли состояние
+                    if (pc.signalingState === 'stable') {
+                        await pc.setLocalDescription(offer);
+                        await sendSignal(peerId, 'offer', offer);
+                        console.log(`✅ Negotiation offer sent to ${peerId}`);
+                    } else {
+                        console.log(`⏳ Signaling state changed to ${pc.signalingState}, aborting negotiation`);
+                    }
                 } catch (error) {
                     console.error(`❌ Error during negotiation with ${peerId}:`, error);
+                } finally {
+                    isNegotiating = false;
                 }
             };
             
@@ -1539,6 +1571,12 @@
                     console.log(`✅ Initial offer sent to ${peerId}`);
                 } catch (error) {
                     console.error(`❌ Error creating initial offer for ${peerId}:`, error);
+                    // Пробуем еще раз через секунду
+                    setTimeout(() => {
+                        if (!state.peerConnections[peerId]) return;
+                        console.log(`🔄 Retrying connection to ${peerId}`);
+                        createPeerConnection(peerId);
+                    }, 1000);
                 }
             } else {
                 console.log(`⏳ Waiting for offer from ${peerId}`);
@@ -1549,7 +1587,9 @@
                 console.log(`🔗 Processing ${state.pendingCandidates[peerId].length} pending candidates`);
                 state.pendingCandidates[peerId].forEach(candidate => {
                     try {
-                        pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                            console.log(`⚠️ Could not add pending candidate: ${err.message}`);
+                        });
                     } catch (error) {
                         console.error('Error adding pending candidate:', error);
                     }
