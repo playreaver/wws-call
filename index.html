@@ -656,7 +656,6 @@
 
     <!-- Audio Elements (will be created dynamically) -->
     <div id="audioContainer"></div>
-
 <script>
     // Конфигурация
     const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
@@ -678,11 +677,6 @@
                 urls: 'turn:openrelay.metered.ca:443',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
-            },
-            { 
-                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
             }
         ],
         iceCandidatePoolSize: 10
@@ -700,7 +694,7 @@
         updateInterval: null,
         participants: [],
         pendingCandidates: {},
-        volumes: JSON.parse(localStorage.getItem('call_volumes')) || {},
+        volumes: JSON.parse(localStorage.getItem('call_volumes')) || {}, // Храним громкость для каждого участника
         connectionAttempts: {},
         lastPollTime: 0,
         processedSignals: new Set(),
@@ -902,11 +896,6 @@
             startUpdates();
             await updateParticipants();
             
-            // ВАЖНО: Разрешаем аудио контекст после взаимодействия с пользователем
-            if (state.audioContext) {
-                await state.audioContext.resume();
-            }
-            
         } catch (error) {
             showToast('Ошибка начала звонка');
             showScreen('homeScreen');
@@ -1092,9 +1081,64 @@
         
         row.appendChild(avatar);
         row.appendChild(info);
+        
+        // Кнопка удаления для создателя
+        if (state.roomOwner && !isMe) {
+            const kickBtn = document.createElement('button');
+            kickBtn.className = 'kick-btn';
+            kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
+            kickBtn.onclick = () => kickParticipant(participant.id);
+            row.appendChild(kickBtn);
+        }
+        
         card.appendChild(row);
         
+        // ИСПРАВЛЕНИЕ: Добавляем ползунок громкости для всех кроме себя
+        if (!isMe) {
+            const volumeBlock = document.createElement('div');
+            volumeBlock.className = 'participant-volume';
+            
+            // Получаем сохраненную громкость или 1 (100%) по умолчанию
+            const volumeValue = state.volumes[participant.id] || 1;
+            
+            volumeBlock.innerHTML = `
+                <input type="range" min="0" max="3" step="0.1" value="${volumeValue}" 
+                       data-peerid="${participant.id}" class="volume-slider">
+                <span class="volume-value" data-peerid="${participant.id}">${Math.round(volumeValue * 100)}%</span>
+            `;
+            
+            // Обработчик изменения громкости
+            const slider = volumeBlock.querySelector('.volume-slider');
+            slider.addEventListener('input', (e) => {
+                const peerId = e.target.dataset.peerid;
+                const value = parseFloat(e.target.value);
+                updateVolume(peerId, value);
+            });
+            
+            card.appendChild(volumeBlock);
+        }
+        
         return card;
+    }
+    
+    // ИСПРАВЛЕНИЕ: Функция обновления громкости
+    function updateVolume(peerId, value) {
+        // Сохраняем значение
+        state.volumes[peerId] = value;
+        localStorage.setItem('call_volumes', JSON.stringify(state.volumes));
+        
+        // Обновляем громкость audio элемента
+        const audio = document.getElementById(`audio_${peerId}`);
+        if (audio) {
+            audio.volume = value;
+            console.log(`🔊 Volume for ${peerId}: ${Math.round(value * 100)}%`);
+        }
+        
+        // Обновляем отображение процентов
+        const volumeSpan = document.querySelector(`.volume-value[data-peerid="${peerId}"]`);
+        if (volumeSpan) {
+            volumeSpan.textContent = Math.round(value * 100) + '%';
+        }
     }
     
     function getInitials(name) {
@@ -1103,12 +1147,32 @@
     }
     
     function getColor(id) {
-        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff'];
+        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'];
         let hash = 0;
         for (let i = 0; i < id.length; i++) {
             hash = id.charCodeAt(i) + ((hash << 5) - hash);
         }
         return colors[Math.abs(hash) % colors.length];
+    }
+    
+    async function kickParticipant(participantId) {
+        if (!confirm('Удалить участника?')) return;
+        
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'kickParticipant',
+                    roomId: state.roomId,
+                    userId: state.userId,
+                    participantId
+                })
+            });
+            showToast('Участник удален');
+        } catch (error) {
+            showToast('Ошибка удаления');
+        }
     }
     
     // ИСПРАВЛЕННАЯ функция создания peer connection
@@ -1135,13 +1199,13 @@
                 }
             };
             
-            // Получение удаленного потока - ИСПРАВЛЕНО
+            // Получение удаленного потока
             pc.ontrack = (e) => {
                 console.log(`🎵 Received track from ${peerId}`);
                 const stream = e.streams[0];
                 if (!stream) return;
                 
-                // Создаем и настраиваем audio элемент
+                // Создаем audio элемент
                 const audioId = `audio_${peerId}`;
                 let audio = document.getElementById(audioId);
                 
@@ -1156,20 +1220,17 @@
                 
                 audio.srcObject = stream;
                 
-                // ВАЖНО: Принудительно воспроизводим
+                // ИСПРАВЛЕНИЕ: Устанавливаем сохраненную громкость
+                const savedVolume = state.volumes[peerId] || 1;
+                audio.volume = savedVolume;
+                console.log(`🔊 Initial volume for ${peerId}: ${Math.round(savedVolume * 100)}%`);
+                
+                // Воспроизводим
                 audio.play().then(() => {
                     console.log(`✅ Audio playing for ${peerId}`);
-                    
-                    // Устанавливаем сохраненную громкость
-                    const volume = state.volumes[peerId] || 1;
-                    audio.volume = volume;
-                    
                 }).catch(err => {
                     console.log(`⚠️ Audio play error:`, err);
-                    // Для Chrome: нужно взаимодействие с пользователем
-                    showToast('Нажмите на экран для включения звука', 3000);
-                    
-                    // Добавляем обработчик клика для включения звука
+                    // Включаем по клику
                     const enableAudio = () => {
                         audio.play();
                         document.removeEventListener('click', enableAudio);
@@ -1185,6 +1246,7 @@
                 console.log(`🔗 ICE state: ${pc.iceConnectionState}`);
                 if (pc.iceConnectionState === 'connected') {
                     console.log(`✅ Connected to ${peerId}`);
+                    showToast(`Подключен к ${getParticipantName(peerId)}`);
                 }
             };
             
@@ -1208,6 +1270,11 @@
         } catch (error) {
             console.error(`❌ Connection error:`, error);
         }
+    }
+    
+    function getParticipantName(peerId) {
+        const p = state.participants.find(p => p.id === peerId);
+        return p ? p.name : peerId.substring(0, 8);
     }
     
     function cleanupPeerConnection(peerId) {
@@ -1336,6 +1403,11 @@
                 }
                 
                 audio.srcObject = stream;
+                
+                // ИСПРАВЛЕНИЕ: Устанавливаем сохраненную громкость
+                const savedVolume = state.volumes[peerId] || 1;
+                audio.volume = savedVolume;
+                
                 audio.play().catch(err => {
                     console.log('Play error:', err);
                     document.addEventListener('click', () => audio.play(), { once: true });
@@ -1377,7 +1449,6 @@
         if (!pc) return;
         
         try {
-            // ИСПРАВЛЕНИЕ: Проверяем состояние перед установкой answer
             if (pc.signalingState === 'have-local-offer') {
                 await pc.setRemoteDescription(new RTCSessionDescription(answer));
                 console.log(`✅ Remote description set from answer`);
@@ -1466,7 +1537,6 @@
     
     // Глобальный обработчик для включения звука
     document.addEventListener('click', () => {
-        // Включаем все audio элементы при клике
         Object.values(state.audioElements).forEach(audio => {
             if (audio.paused) {
                 audio.play().catch(() => {});
