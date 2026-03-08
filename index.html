@@ -661,20 +661,14 @@
     // Конфигурация
     const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
     
-    // Улучшенная WebRTC Configuration с лучшими STUN/TURN серверами
     const config = {
         iceServers: [
-            // Google STUN серверы
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-            
-            // Twilio STUN серверы
             { urls: 'stun:global.stun.twilio.com:3478' },
-            
-            // Публичные TURN серверы
             { 
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
@@ -719,7 +713,8 @@
         lastPollTime: 0,
         processedSignals: new Set(),
         reconnectionAttempts: {},
-        statsInterval: null
+        statsInterval: null,
+        signalRetryCount: {} // Счетчик повторных отправок сигналов
     };
     
     // Инициализация
@@ -728,73 +723,51 @@
     async function init() {
         console.log('=== Call App Initialization ===');
         
-        // Генерация ID и имени
         state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         state.userName = generateName();
         
         console.log('User ID:', state.userId);
         console.log('User Name:', state.userName);
-        console.log('WebRTC Support:', !!window.RTCPeerConnection);
-        console.log('API URL:', API_URL);
         
-        // Проверка поддержки
         if (!checkSupport()) {
             showToast('Ваш браузер не поддерживает звонки', 5000);
             document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
             return;
         }
     
-        // Проверка подключения
         const connected = await checkConnection();
         
         if (!connected) {
             showToast('Проверьте подключение к интернету', 3000);
         }
         
-        // Скрываем загрузку
         setTimeout(() => {
             document.getElementById('loading').style.display = 'none';
         }, 1000);
     }
     
     function generateName() {
-        const names = [
-            'Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 
-            'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария', 
-            'Екатерина', 'Ольга', 'Татьяна', 'Наталья'
-        ];
-        const surnames = [
-            'Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов',
-            'Попов', 'Лебедев', 'Козлов', 'Новиков', 'Морозов'
-        ];
+        const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария', 'Екатерина', 'Ольга', 'Татьяна', 'Наталья'];
+        const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов', 'Новиков', 'Морозов'];
         
-        const name = names[Math.floor(Math.random() * names.length)];
-        const surname = surnames[Math.floor(Math.random() * surnames.length)];
-        
-        return `${name} ${surname}`;
+        return `${names[Math.floor(Math.random() * names.length)]} ${surnames[Math.floor(Math.random() * surnames.length)]}`;
     }
     
     function checkSupport() {
-        const supported = window.RTCPeerConnection && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-        console.log('WebRTC Support Check:', supported);
-        return !!supported;
+        return !!(window.RTCPeerConnection && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     }
     
     async function checkConnection() {
         try {
-            console.log('Checking API connection...');
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'ping' })
             });
             
-            const connected = response.ok;
-            updateConnectionStatus(connected);
-            console.log('API Connection:', connected ? 'OK' : 'FAILED');
-            return connected;
+            updateConnectionStatus(response.ok);
+            return response.ok;
         } catch (error) {
-            console.error('Connection check error:', error);
             updateConnectionStatus(false);
             return false;
         }
@@ -812,19 +785,15 @@
         text.textContent = connected ? 'Подключено' : 'Отключено';
     }
     
-    // Навигация
     function showScreen(screenId) {
-        console.log('Showing screen:', screenId);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
     }
     
-    // Уведомления
     function showToast(message, duration = 3000) {
         const toast = document.getElementById('toast');
         if (!toast) return;
         
-        console.log('Toast:', message);
         toast.textContent = message;
         toast.classList.add('show');
         
@@ -833,24 +802,20 @@
         }, duration);
     }
     
-    // Создание комнаты
     async function createRoom() {
         showLoading('Создание звонка...');
-        console.log('Creating room...');
         
         try {
-            // Сначала запрашиваем доступ к микрофону
             if (!state.localStream) {
                 try {
                     await requestMicrophonePermission();
                 } catch (error) {
-                    showToast('Не удалось получить доступ к микрофону. Проверьте разрешения.');
+                    showToast('Не удалось получить доступ к микрофону');
                     hideLoading();
                     return;
                 }
             }
             
-            console.log('Sending createRoom request...');
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -861,14 +826,11 @@
                 })
             });
     
-            console.log('Create room response status:', response.status);
             const data = await response.json();
-            console.log('Create room response:', data);
             
             if (data.success) {
                 state.roomId = data.roomId;
                 state.roomOwner = true;
-                console.log('✅ Room created:', state.roomId);
                 await startCall();
                 showToast('Звонок создан! Код скопирован');
             } else {
@@ -882,7 +844,6 @@
         }
     }
     
-    // Присоединение к комнате
     async function joinRoom() {
         const code = document.getElementById('roomCode').value.trim().toUpperCase();
         
@@ -892,21 +853,18 @@
         }
     
         showLoading('Присоединение...');
-        console.log('Joining room:', code);
         
         try {
-            // Сначала запрашиваем доступ к микрофону
             if (!state.localStream) {
                 try {
                     await requestMicrophonePermission();
                 } catch (error) {
-                    showToast('Не удалось получить доступ к микрофону. Проверьте разрешения.');
+                    showToast('Не удалось получить доступ к микрофону');
                     hideLoading();
                     return;
                 }
             }
             
-            console.log('Sending joinRoom request...');
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -918,14 +876,11 @@
                 })
             });
     
-            console.log('Join room response status:', response.status);
             const data = await response.json();
-            console.log('Join room response:', data);
             
             if (data.success) {
                 state.roomId = code;
                 state.roomOwner = false;
-                console.log('✅ Joined room:', state.roomId);
                 await startCall();
                 showToast('Присоединились к звонку');
             } else {
@@ -939,10 +894,8 @@
         }
     }
     
-    // Запрос доступа к микрофону
     async function requestMicrophonePermission() {
         try {
-            console.log('Requesting microphone permission...');
             state.localStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -953,10 +906,6 @@
                 video: false
             });
             
-            console.log('✅ Microphone access granted');
-            console.log('Audio tracks:', state.localStream.getAudioTracks().length);
-            
-            // Включаем микрофон по умолчанию
             state.isMuted = false;
             state.localStream.getAudioTracks().forEach(track => {
                 track.enabled = true;
@@ -969,11 +918,11 @@
             
             let errorMessage = 'Ошибка доступа к микрофону';
             if (error.name === 'NotAllowedError') {
-                errorMessage = 'Доступ к микрофону отклонен. Разрешите доступ в настройках браузера.';
+                errorMessage = 'Доступ к микрофону отклонен';
             } else if (error.name === 'NotFoundError') {
-                errorMessage = 'Микрофон не найден. Убедитесь, что микрофон подключен.';
+                errorMessage = 'Микрофон не найден';
             } else if (error.name === 'NotReadableError') {
-                errorMessage = 'Микрофон уже используется другим приложением.';
+                errorMessage = 'Микрофон уже используется';
             }
             
             showToast(errorMessage, 5000);
@@ -981,54 +930,39 @@
         }
     }
     
-    // Начало звонка
     async function startCall() {
         try {
-            console.log('🚀 Starting call in room:', state.roomId);
-            
-            // Показываем экран звонка
             showScreen('callScreen');
             document.getElementById('currentRoomCode').textContent = state.roomId;
             
-            // Обновляем UI кнопок
             updateShareButton();
             
-            // Авто-копирование кода при создании
             if (state.roomOwner) {
                 setTimeout(() => copyRoomCode(), 500);
             }
             
-            // Запускаем обновления
             startUpdates();
-            
-            // Обновляем список участников
             await updateParticipants();
             
         } catch (error) {
             console.error('Start call error:', error);
-            showToast('Ошибка начала звонка: ' + error.message);
+            showToast('Ошибка начала звонка');
             showScreen('homeScreen');
         }
     }
     
     function updateShareButton() {
         const shareBtn = document.getElementById('shareBtn');
-        if (navigator.share) {
-            shareBtn.style.display = 'flex';
-            shareBtn.title = 'Поделиться кодом';
-        } else {
-            shareBtn.style.display = 'none';
-        }
+        shareBtn.style.display = navigator.share ? 'flex' : 'none';
     }
     
-    // Управление микрофоном
     function toggleMic() {
         if (!state.localStream) {
             requestMicrophonePermission().then(() => {
                 state.isMuted = false;
                 updateMicUI();
                 showToast('Микрофон включен', 1500);
-            }).catch(error => {
+            }).catch(() => {
                 showToast('Не удалось получить доступ к микрофону');
             });
             return;
@@ -1042,7 +976,7 @@
         updateMicUI();
         showToast(state.isMuted ? 'Микрофон выключен' : 'Микрофон включен', 1500);
         
-        // Отправляем статус всем участникам
+        // Отправляем статус всем
         Object.keys(state.peerConnections).forEach(peerId => {
             sendSignal(peerId, 'audioStatus', { muted: state.isMuted });
         });
@@ -1056,11 +990,8 @@
         btn.innerHTML = state.isMuted ? 
             '<i class="fas fa-microphone-slash"></i>' : 
             '<i class="fas fa-microphone"></i>';
-        
-        btn.title = state.isMuted ? 'Включить микрофон' : 'Выключить микрофон';
     }
     
-    // Управление динамиком
     function toggleSpeaker() {
         state.isSpeaker = !state.isSpeaker;
         
@@ -1078,7 +1009,6 @@
         showToast(state.isSpeaker ? 'Основной динамик' : 'Стандартный', 1500);
     }
     
-    // Копирование кода комнаты
     async function copyRoomCode() {
         if (!state.roomId) return;
         
@@ -1096,7 +1026,6 @@
         }
     }
     
-    // Поделиться кодом
     async function shareRoomCode() {
         if (!state.roomId) return;
         
@@ -1117,20 +1046,17 @@
         }
     }
     
-    // Запуск обновлений
     function startUpdates() {
         if (state.updateInterval) clearInterval(state.updateInterval);
         if (state.signalInterval) clearInterval(state.signalInterval);
         if (state.statsInterval) clearInterval(state.statsInterval);
         
-        console.log('🔄 Starting updates for room:', state.roomId);
-        
-        // Обновление списка участников каждые 3 секунды
+        // Обновление списка участников каждые 2 секунды
         state.updateInterval = setInterval(() => {
             updateParticipants();
-        }, 3000);
+        }, 2000);
         
-        // Получение сигналов WebRTC
+        // Получение сигналов каждую секунду
         state.signalInterval = setInterval(() => {
             pollSignals();
         }, 1000);
@@ -1140,67 +1066,67 @@
             checkConnection();
         }, 30000);
         
-        // Мониторинг статистики соединения
+        // Мониторинг соединений
         state.statsInterval = setInterval(() => {
             monitorConnections();
         }, 10000);
         
-        // Первый запрос
         setTimeout(() => {
             updateParticipants();
             pollSignals();
         }, 500);
     }
     
-    // Мониторинг соединений
     async function monitorConnections() {
         Object.keys(state.peerConnections).forEach(async (peerId) => {
             const pc = state.peerConnections[peerId];
-            if (pc && pc.iceConnectionState) {
-                console.log(`📊 ${peerId}: ICE=${pc.iceConnectionState}, Signaling=${pc.signalingState}`);
-                
-                // Если соединение в disconnected более 30 секунд, пытаемся переподключиться
-                if (pc.iceConnectionState === 'disconnected') {
-                    if (!state.reconnectionAttempts[peerId]) {
-                        state.reconnectionAttempts[peerId] = { startTime: Date.now(), attempts: 0 };
-                    }
-                    
-                    const disconnectedTime = Date.now() - state.reconnectionAttempts[peerId].startTime;
-                    if (disconnectedTime > 30000 && state.reconnectionAttempts[peerId].attempts < 3) {
-                        console.log(`🔄 Attempting to reconnect to ${peerId}`);
-                        state.reconnectionAttempts[peerId].attempts++;
-                        await attemptIceRestart(pc, peerId);
-                    }
-                } else if (pc.iceConnectionState === 'connected') {
-                    // Сброс счетчика переподключений при успешном соединении
-                    delete state.reconnectionAttempts[peerId];
+            if (!pc) return;
+            
+            console.log(`📊 ${peerId}: ICE=${pc.iceConnectionState}, Signaling=${pc.signalingState}`);
+            
+            // Если соединение не устанавливается долго, пробуем переподключиться
+            if (pc.iceConnectionState === 'new' && pc.signalingState === 'have-local-offer') {
+                const waitTime = Date.now() - (state.connectionStartTime?.[peerId] || 0);
+                if (waitTime > 10000) {
+                    console.log(`🔄 Connection timeout for ${peerId}, restarting...`);
+                    attemptIceRestart(pc, peerId);
                 }
+            }
+            
+            if (pc.iceConnectionState === 'disconnected') {
+                if (!state.reconnectionAttempts[peerId]) {
+                    state.reconnectionAttempts[peerId] = { startTime: Date.now(), attempts: 0 };
+                }
+                
+                const disconnectedTime = Date.now() - state.reconnectionAttempts[peerId].startTime;
+                if (disconnectedTime > 30000 && state.reconnectionAttempts[peerId].attempts < 3) {
+                    state.reconnectionAttempts[peerId].attempts++;
+                    attemptIceRestart(pc, peerId);
+                }
+            } else if (pc.iceConnectionState === 'connected') {
+                delete state.reconnectionAttempts[peerId];
             }
         });
     }
     
-    // Попытка перезапуска ICE
     async function attemptIceRestart(pc, peerId) {
         try {
-            console.log(`🔄 Attempting ICE restart for ${peerId}`);
+            console.log(`🔄 ICE restart for ${peerId}`);
             const offer = await pc.createOffer({ 
                 iceRestart: true,
                 offerToReceiveAudio: true 
             });
             await pc.setLocalDescription(offer);
             await sendSignal(peerId, 'offer', offer);
-            console.log(`✅ ICE restart offer sent to ${peerId}`);
         } catch (error) {
             console.error(`❌ ICE restart failed for ${peerId}:`, error);
         }
     }
     
-    // Обновление списка участников
     async function updateParticipants() {
         if (!state.roomId) return;
         
         try {
-            console.log('🔄 Updating participants...');
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1217,14 +1143,11 @@
                     const oldParticipants = state.participants.map(p => p.id).sort();
                     const newParticipants = data.participants.map(p => p.id).sort();
                     
-                    const participantsChanged = JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants);
-                    
                     state.participants = data.participants || [];
                     
-                    if (participantsChanged) {
-                        console.log('👥 Participants updated:', state.participants.length, 'participants');
+                    if (JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants)) {
+                        console.log('👥 Participants:', state.participants.length);
                         renderParticipants();
-                        
                         connectToNewParticipants(oldParticipants, newParticipants);
                     }
                 }
@@ -1234,7 +1157,6 @@
         }
     }
     
-    // Подключение к новым участникам
     function connectToNewParticipants(oldList, newList) {
         const newParticipants = newList.filter(id => 
             id !== state.userId && 
@@ -1247,16 +1169,15 @@
             createPeerConnection(peerId);
         });
         
-        // Удаляем соединения с вышедшими участниками
+        // Чистим старые соединения
         Object.keys(state.peerConnections).forEach(peerId => {
             if (!newList.includes(peerId) && peerId !== state.userId) {
-                console.log('👋 Cleaning up connection to left participant:', peerId);
+                console.log('👋 Cleaning up:', peerId);
                 cleanupPeerConnection(peerId);
             }
         });
     }
     
-    // Отрисовка участников
     function renderParticipants() {
         const container = document.getElementById('participantsView');
         if (!container) return;
@@ -1264,31 +1185,18 @@
         container.innerHTML = '';
         
         if (state.participants.length === 0) {
-            container.innerHTML = `
-                <div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.4);">
-                    <i class="fas fa-users" style="font-size: 48px; margin-bottom: 20px;"></i>
-                    <p>Ожидание участников...</p>
-                </div>
-            `;
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-users" style="font-size: 48px; margin-bottom: 20px;"></i><p>Ожидание участников...</p></div>';
             return;
         }
         
         const sortedParticipants = [...state.participants].sort((a, b) => {
             if (a.isOwner && !b.isOwner) return -1;
             if (!a.isOwner && b.isOwner) return 1;
-            
-            const aSpeaking = state.audioAnalyzers[a.id]?.speaking || false;
-            const bSpeaking = state.audioAnalyzers[b.id]?.speaking || false;
-            
-            if (aSpeaking && !bSpeaking) return -1;
-            if (!aSpeaking && bSpeaking) return 1;
-            
             return 0;
         });
         
         sortedParticipants.forEach(p => {
-            const card = createParticipantCard(p);
-            container.appendChild(card);
+            container.appendChild(createParticipantCard(p));
         });
     }
     
@@ -1303,17 +1211,14 @@
         const initials = getInitials(participant.name || participant.id);
         const color = getColor(participant.id);
         
-        // Верхняя строка (аватар + информация + кнопка удаления)
         const row = document.createElement('div');
         row.className = 'participant-row';
         
-        // Аватар
         const avatar = document.createElement('div');
         avatar.className = 'participant-avatar';
         avatar.style.background = color;
         avatar.textContent = initials;
         
-        // Информация
         const info = document.createElement('div');
         info.className = 'participant-info';
         info.innerHTML = `
@@ -1331,7 +1236,6 @@
         row.appendChild(avatar);
         row.appendChild(info);
         
-        // Кнопка удаления (только для создателя и не для себя)
         if (state.roomOwner && !isMe) {
             const kickBtn = document.createElement('button');
             kickBtn.className = 'kick-btn';
@@ -1342,7 +1246,6 @@
         
         card.appendChild(row);
         
-        // Ползунок громкости (для всех кроме себя)
         if (!isMe) {
             const volumeBlock = document.createElement('div');
             volumeBlock.className = 'participant-volume';
@@ -1353,11 +1256,9 @@
                 <span class="volume-value" data-peerid="${participant.id}">${Math.round(volumeValue * 100)}%</span>
             `;
             
-            // Обработчик изменения громкости
             const slider = volumeBlock.querySelector('.volume-slider');
             slider.addEventListener('input', (e) => {
-                const val = e.target.value;
-                updateVolume(participant.id, val);
+                updateVolume(participant.id, e.target.value);
             });
             
             card.appendChild(volumeBlock);
@@ -1368,17 +1269,11 @@
     
     function getInitials(name) {
         const words = name.split(' ');
-        if (words.length >= 2) {
-            return (words[0][0] + words[1][0]).toUpperCase();
-        }
-        return name.substring(0, 2).toUpperCase();
+        return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
     }
     
     function getColor(id) {
-        const colors = [
-            '#667eea', '#764ba2', '#f093fb', '#f5576c',
-            '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'
-        ];
+        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'];
         let hash = 0;
         for (let i = 0; i < id.length; i++) {
             hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -1386,12 +1281,11 @@
         return colors[Math.abs(hash) % colors.length];
     }
     
-    // Управление участниками
     async function kickParticipant(participantId) {
-        if (!confirm('Удалить участника из звонка?')) return;
+        if (!confirm('Удалить участника?')) return;
         
         try {
-            const response = await fetch(API_URL, {
+            await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1401,287 +1295,142 @@
                     participantId
                 })
             });
-            
-            const data = await response.json();
-            if (data.success) {
-                showToast('Участник удален');
-                updateParticipants();
-            }
+            showToast('Участник удален');
         } catch (error) {
             showToast('Ошибка удаления');
         }
     }
     
-    // WebRTC соединения - ИСПРАВЛЕННАЯ ВЕРСИЯ
+    // ИСПРАВЛЕННАЯ функция создания peer connection
     async function createPeerConnection(peerId) {
         if (state.peerConnections[peerId]) {
-            console.log(`⚠️ Peer connection to ${peerId} already exists`);
+            console.log(`⚠️ Connection to ${peerId} already exists`);
             return;
         }
         
-        console.log(`🔗 Creating peer connection to ${peerId}`);
+        console.log(`🔗 Creating connection to ${peerId}`);
         
-        if (peerId === state.userId) {
-            console.log(`⚠️ Cannot create peer connection to self`);
-            return;
-        }
-        
-        if (state.connectionAttempts[peerId] && state.connectionAttempts[peerId] > 3) {
-            console.log(`⏳ Too many connection attempts to ${peerId}`);
-            return;
-        }
-        
-        if (!state.connectionAttempts[peerId]) {
-            state.connectionAttempts[peerId] = 0;
-        }
-        state.connectionAttempts[peerId]++;
+        if (!state.connectionStartTime) state.connectionStartTime = {};
+        state.connectionStartTime[peerId] = Date.now();
         
         try {
             const pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            // Добавляем локальные треки
+            // Добавляем треки
             if (state.localStream) {
                 state.localStream.getTracks().forEach(track => {
                     try {
                         pc.addTrack(track, state.localStream);
-                        console.log(`🔗 Added ${track.kind} track to ${peerId}`);
+                        console.log(`🔗 Added ${track.kind} track`);
                     } catch (error) {
                         console.error('Error adding track:', error);
                     }
                 });
             }
             
-            // Обработчики событий
+            // ICE candidates
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
-                    console.log(`❄️ ICE candidate for ${peerId}: ${e.candidate.type}`);
+                    console.log(`❄️ ICE candidate: ${e.candidate.type}`);
                     sendSignal(peerId, 'candidate', e.candidate);
-                } else {
-                    console.log(`❄️ ICE gathering complete for ${peerId}`);
                 }
             };
             
+            // Remote track
             pc.ontrack = (e) => {
                 console.log(`🎵 Received track from ${peerId}`);
                 handleRemoteTrack(e, peerId);
             };
             
+            // Connection state
             pc.oniceconnectionstatechange = () => {
-                console.log(`🔗 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
+                console.log(`🔗 ICE state for ${peerId}: ${pc.iceConnectionState}`);
                 
-                switch(pc.iceConnectionState) {
-                    case 'connected':
-                    case 'completed':
-                        console.log(`✅ Connected to ${peerId}`);
-                        state.connectionAttempts[peerId] = 0;
-                        break;
-                        
-                    case 'disconnected':
-                        console.log(`⚠️ Disconnected from ${peerId} - attempting to recover`);
-                        setTimeout(() => {
-                            if (pc.iceConnectionState === 'disconnected' && state.participants.some(p => p.id === peerId)) {
-                                console.log(`🔄 Initiating ICE restart for ${peerId}`);
-                                attemptIceRestart(pc, peerId);
-                            }
-                        }, 2000);
-                        break;
-                        
-                    case 'failed':
-                        console.log(`❌ Connection failed to ${peerId}`);
-                        setTimeout(() => {
-                            if (state.participants.some(p => p.id === peerId)) {
-                                console.log(`🔄 Attempting to reconnect to ${peerId}`);
-                                cleanupPeerConnection(peerId);
-                                setTimeout(() => createPeerConnection(peerId), 1000);
-                            }
-                        }, 5000);
-                        break;
-                        
-                    case 'closed':
-                        console.log(`❌ Connection closed to ${peerId}`);
-                        cleanupPeerConnection(peerId);
-                        break;
+                if (pc.iceConnectionState === 'connected') {
+                    console.log(`✅ Connected to ${peerId}`);
+                    showToast(`Подключен к ${participantName(peerId)}`);
                 }
             };
             
-            // Убираем onnegotiationneeded полностью и создаем offer через таймер
-            
-            // Определяем инициатора
-            const shouldCreateOffer = state.userId < peerId;
-            console.log(`🤔 Should create offer for ${peerId}? ${shouldCreateOffer}`);
-            
-            if (shouldCreateOffer) {
-                // Небольшая задержка, чтобы все треки успели добавиться
-                setTimeout(async () => {
-                    try {
-                        const currentPc = state.peerConnections[peerId];
-                        if (!currentPc) return;
-                        
-                        // Проверяем состояние перед созданием offer
-                        if (currentPc.signalingState !== 'stable') {
-                            console.log(`⏳ Signaling state is ${currentPc.signalingState}, waiting for ${peerId}`);
-                            return;
-                        }
-                        
-                        console.log(`📤 Creating offer for ${peerId}`);
-                        
-                        const offer = await currentPc.createOffer({
-                            offerToReceiveAudio: true,
-                            offerToReceiveVideo: false
-                        });
-                        
-                        // Устанавливаем локальное описание
-                        await currentPc.setLocalDescription(offer);
-                        
-                        // Отправляем сигнал
-                        await sendSignal(peerId, 'offer', offer);
-                        console.log(`✅ Offer sent to ${peerId}`);
-                        
-                    } catch (error) {
-                        console.error(`❌ Error creating offer for ${peerId}:`, error);
-                    }
-                }, 500);
-            } else {
-                console.log(`⏳ Will wait for offer from ${peerId}`);
-            }
+            // ВАЖНО: Отправляем offer сразу после создания
+            setTimeout(async () => {
+                try {
+                    const currentPc = state.peerConnections[peerId];
+                    if (!currentPc) return;
+                    
+                    console.log(`📤 Creating offer for ${peerId}`);
+                    
+                    const offer = await currentPc.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: false
+                    });
+                    
+                    await currentPc.setLocalDescription(offer);
+                    
+                    // Отправляем offer несколько раз для надежности
+                    await sendSignal(peerId, 'offer', offer);
+                    setTimeout(() => sendSignal(peerId, 'offer', offer), 1000);
+                    setTimeout(() => sendSignal(peerId, 'offer', offer), 3000);
+                    
+                    console.log(`✅ Offer sent to ${peerId}`);
+                    
+                } catch (error) {
+                    console.error(`❌ Error creating offer:`, error);
+                }
+            }, 500);
             
         } catch (error) {
-            console.error(`❌ Create peer connection error for ${peerId}:`, error);
+            console.error(`❌ Create connection error:`, error);
             cleanupPeerConnection(peerId);
         }
     }
     
-    // Обработка удалённого трека с Web Audio
+    function participantName(peerId) {
+        const p = state.participants.find(p => p.id === peerId);
+        return p ? p.name : peerId.substring(0, 8);
+    }
+    
     function handleRemoteTrack(event, peerId) {
-        console.log(`🎵 Setting up remote track for ${peerId}`);
+        console.log(`🎵 Setting up audio for ${peerId}`);
         const stream = event.streams[0];
         if (!stream) return;
     
-        // Удаляем предыдущую обработку для этого участника
         cleanupAudioNodes(peerId);
     
-        // Создаём тихий audio-элемент (только для резерва)
+        // Создаем audio элемент
         const audio = document.createElement('audio');
         audio.id = `audio_${peerId}`;
         audio.autoplay = true;
-        audio.volume = 0;
+        audio.volume = 1; // Включаем звук
         audio.style.display = 'none';
         audio.srcObject = stream;
         document.getElementById('audioContainer').appendChild(audio);
-    
-        // Создаём Web Audio цепочку
-        if (!state.audioContext) {
-            state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (state.audioContext.state === 'suspended') {
-                state.audioContext.resume();
-            }
-        }
-    
-        const source = state.audioContext.createMediaStreamSource(stream);
-        const analyser = state.audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.8;
-    
-        const gainNode = state.audioContext.createGain();
-        const savedVolume = state.volumes[peerId] || 1;
-        gainNode.gain.value = savedVolume;
-    
-        source.connect(analyser);
-        analyser.connect(gainNode);
-        gainNode.connect(state.audioContext.destination);
-    
-        state.audioNodes[peerId] = { source, analyser, gainNode };
-    
-        setupSpeechDetection(analyser, peerId);
+        
+        // Воспроизводим
+        audio.play().catch(e => console.log('Audio play error:', e));
+        
+        console.log(`✅ Audio setup complete for ${peerId}`);
     }
     
-    // Очистка Web Audio узлов
     function cleanupAudioNodes(peerId) {
-        const nodes = state.audioNodes[peerId];
-        if (nodes) {
-            try {
-                nodes.source.disconnect();
-                nodes.analyser.disconnect();
-                nodes.gainNode.disconnect();
-            } catch (e) {}
-            delete state.audioNodes[peerId];
-        }
         const audio = document.getElementById(`audio_${peerId}`);
         if (audio) audio.remove();
-        
-        if (state.audioAnalyzers[peerId]) {
-            delete state.audioAnalyzers[peerId];
-        }
     }
     
-    // Детектор речи
-    function setupSpeechDetection(analyser, peerId) {
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        let speakingTimeout = null;
-        let lastSpeakingState = false;
-    
-        function detect() {
-            if (!state.audioNodes[peerId]) return;
-    
-            analyser.getByteFrequencyData(data);
-            const average = data.reduce((a, b) => a + b) / data.length;
-            const isSpeaking = average > 20;
-    
-            if (isSpeaking !== lastSpeakingState) {
-                lastSpeakingState = isSpeaking;
-                if (!state.audioAnalyzers) state.audioAnalyzers = {};
-                state.audioAnalyzers[peerId] = { speaking: isSpeaking, lastUpdate: Date.now() };
-    
-                if (isSpeaking) {
-                    renderParticipants();
-                } else {
-                    clearTimeout(speakingTimeout);
-                    speakingTimeout = setTimeout(() => {
-                        renderParticipants();
-                    }, 500);
-                }
-            }
-    
-            requestAnimationFrame(detect);
-        }
-    
-        detect();
-    }
-    
-    // Обновление громкости
-    function updateVolume(peerId, value) {
-        value = parseFloat(value);
-        state.volumes[peerId] = value;
-        localStorage.setItem('call_volumes', JSON.stringify(state.volumes));
-        
-        const nodes = state.audioNodes[peerId];
-        if (nodes) {
-            nodes.gainNode.gain.value = value;
-        }
-        
-        const volumeSpan = document.querySelector(`.volume-value[data-peerid="${peerId}"]`);
-        if (volumeSpan) {
-            volumeSpan.textContent = Math.round(value * 100) + '%';
-        }
-    }
-    
-    // Очистка соединения с участником
     function cleanupPeerConnection(peerId) {
         if (state.peerConnections[peerId]) {
             state.peerConnections[peerId].close();
             delete state.peerConnections[peerId];
         }
         cleanupAudioNodes(peerId);
-        console.log(`🧹 Cleaned up peer connection to ${peerId}`);
     }
     
-    // Получение сигналов
+    // ИСПРАВЛЕННАЯ функция получения сигналов
     async function pollSignals() {
         if (!state.roomId) return;
         
         try {
-            console.log(`📡 Polling signals for room ${state.roomId}`);
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1695,7 +1444,7 @@
     
             if (response.ok) {
                 const data = await response.json();
-                if (data.success && data.signals) {
+                if (data.success && data.signals && data.signals.length > 0) {
                     console.log(`📡 Received ${data.signals.length} signals`);
                     state.lastPollTime = Date.now();
                     
@@ -1705,31 +1454,23 @@
                 }
             }
         } catch (error) {
-            console.error('📡 Signal polling error:', error);
+            console.error('Poll signals error:', error);
         }
     }
     
     async function handleSignal(signal) {
-        const signalId = `${signal.from}_${signal.type}_${JSON.stringify(signal.data)}`;
+        const signalId = `${signal.from}_${signal.type}_${Date.now()}`;
         
-        if (state.processedSignals.has(signalId)) {
-            console.log(`📨 Skipping duplicate signal: ${signalId}`);
-            return;
-        }
-        
+        if (state.processedSignals.has(signalId)) return;
         state.processedSignals.add(signalId);
         
         if (state.processedSignals.size > 100) {
-            const first = state.processedSignals.values().next().value;
-            state.processedSignals.delete(first);
+            state.processedSignals.delete(state.processedSignals.values().next().value);
         }
         
-        if (signal.from === state.userId) {
-            console.log(`📨 Ignoring signal from self`);
-            return;
-        }
+        if (signal.from === state.userId) return;
         
-        console.log(`📨 Processing signal from ${signal.from}, type: ${signal.type}`);
+        console.log(`📨 Processing ${signal.type} from ${signal.from}`);
         
         try {
             switch (signal.type) {
@@ -1742,20 +1483,9 @@
                 case 'candidate':
                     await handleCandidate(signal.from, signal.data);
                     break;
-                case 'audioStatus':
-                    console.log(`📨 Audio status from ${signal.from}:`, signal.data);
-                    break;
-                case 'kicked':
-                    if (signal.to === state.userId) {
-                        showToast('Вас удалили из звонка');
-                        leaveRoom();
-                    }
-                    break;
-                default:
-                    console.log(`📨 Unknown signal type: ${signal.type}`);
             }
         } catch (error) {
-            console.error(`❌ Error handling signal from ${signal.from}:`, error);
+            console.error(`Error handling signal:`, error);
         }
     }
     
@@ -1778,29 +1508,22 @@
         }
     }
     
-    // Обработка предложения - ИСПРАВЛЕННАЯ ВЕРСИЯ
     async function handleOffer(peerId, offer) {
-        console.log(`📨 Received offer from ${peerId}`);
+        console.log(`📨 Handling offer from ${peerId}`);
         
         let pc = state.peerConnections[peerId];
         
         if (!pc) {
-            console.log(`🔗 Creating new peer connection for offer from ${peerId}`);
+            console.log(`🔗 Creating new connection for offer`);
             pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            // Добавляем локальный поток
             if (state.localStream) {
                 state.localStream.getTracks().forEach(track => {
-                    try {
-                        pc.addTrack(track, state.localStream);
-                    } catch (error) {
-                        console.error('Error adding track in handleOffer:', error);
-                    }
+                    pc.addTrack(track, state.localStream);
                 });
             }
             
-            // Настройка обработчиков
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
                     sendSignal(peerId, 'candidate', e.candidate);
@@ -1810,88 +1533,55 @@
             pc.ontrack = (e) => {
                 handleRemoteTrack(e, peerId);
             };
-            
-            pc.oniceconnectionstatechange = () => {
-                console.log(`🔗 ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
-            };
         }
         
         try {
-            // Проверяем текущее состояние
-            if (pc.signalingState !== 'stable') {
-                console.log(`⏳ Signaling state is ${pc.signalingState}, ignoring offer from ${peerId}`);
-                return;
-            }
-            
-            // Устанавливаем remote description
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
-            console.log(`✅ Set remote description from ${peerId}`);
+            console.log(`✅ Remote description set`);
             
-            // Создаем answer
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
+            
+            // Отправляем answer несколько раз
             await sendSignal(peerId, 'answer', answer);
+            setTimeout(() => sendSignal(peerId, 'answer', answer), 1000);
+            
             console.log(`✅ Answer sent to ${peerId}`);
             
-            // Добавляем отложенные ICE кандидаты
+            // Добавляем отложенные кандидаты
             if (state.pendingCandidates[peerId]) {
                 console.log(`🔗 Adding ${state.pendingCandidates[peerId].length} pending candidates`);
                 for (const candidate of state.pendingCandidates[peerId]) {
                     try {
                         await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    } catch (error) {
-                        console.log(`⚠️ Could not add pending candidate: ${error.message}`);
-                    }
+                    } catch (e) {}
                 }
                 delete state.pendingCandidates[peerId];
             }
             
         } catch (error) {
-            console.error(`❌ Error handling offer from ${peerId}:`, error);
+            console.error(`Error handling offer:`, error);
         }
     }
     
-    // Обработка ответа
     async function handleAnswer(peerId, answer) {
-        console.log(`📨 Received answer from ${peerId}`);
+        console.log(`📨 Handling answer from ${peerId}`);
         
         const pc = state.peerConnections[peerId];
-        if (!pc) {
-            console.warn(`No peer connection for ${peerId}`);
-            return;
-        }
+        if (!pc) return;
         
         try {
-            if (pc.signalingState !== 'have-local-offer') {
-                console.log(`⏳ Signaling state is ${pc.signalingState}, ignoring answer from ${peerId}`);
-                return;
-            }
-            
             await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            console.log(`✅ Set remote description (answer) from ${peerId}`);
+            console.log(`✅ Remote description set from answer`);
         } catch (error) {
-            console.error(`❌ Error setting remote description from ${peerId}:`, error);
+            console.error(`Error handling answer:`, error);
         }
     }
     
-    // Обработка кандидата - ИСПРАВЛЕННАЯ ВЕРСИЯ
     async function handleCandidate(peerId, candidate) {
-        console.log(`📨 Received candidate from ${peerId}`);
-        
         const pc = state.peerConnections[peerId];
-        if (!pc) {
-            console.log(`⏳ No peer connection for ${peerId}, caching candidate`);
-            
-            if (!state.pendingCandidates[peerId]) {
-                state.pendingCandidates[peerId] = [];
-            }
-            state.pendingCandidates[peerId].push(candidate);
-            return;
-        }
         
-        // Проверяем, установлен ли remote description
-        if (pc.remoteDescription === null) {
-            console.log(`📦 Caching candidate for ${peerId} (remote description not set yet)`);
+        if (!pc || pc.remoteDescription === null) {
             if (!state.pendingCandidates[peerId]) {
                 state.pendingCandidates[peerId] = [];
             }
@@ -1901,13 +1591,22 @@
         
         try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            console.log(`✅ Added ICE candidate from ${peerId}`);
         } catch (error) {
-            console.warn(`⚠️ Add ICE candidate warning: ${error.message}`);
+            console.warn(`Add candidate warning:`, error.message);
         }
     }
     
-    // Выход из звонка
+    function updateVolume(peerId, value) {
+        value = parseFloat(value);
+        state.volumes[peerId] = value;
+        localStorage.setItem('call_volumes', JSON.stringify(state.volumes));
+        
+        const volumeSpan = document.querySelector(`.volume-value[data-peerid="${peerId}"]`);
+        if (volumeSpan) {
+            volumeSpan.textContent = Math.round(value * 100) + '%';
+        }
+    }
+    
     async function leaveRoom() {
         if (!confirm('Завершить звонок?')) return;
         
@@ -1922,9 +1621,7 @@
                         userId: state.userId 
                     })
                 });
-            } catch (error) {
-                console.error('Leave error:', error);
-            }
+            } catch (error) {}
         }
         
         cleanup();
@@ -1933,74 +1630,40 @@
     }
     
     function cleanup() {
-        console.log('🧹 Cleaning up...');
-        
         if (state.updateInterval) clearInterval(state.updateInterval);
         if (state.signalInterval) clearInterval(state.signalInterval);
         if (state.statsInterval) clearInterval(state.statsInterval);
         
-        Object.values(state.peerConnections).forEach(pc => {
-            if (pc) pc.close();
-        });
+        Object.values(state.peerConnections).forEach(pc => pc.close());
         state.peerConnections = {};
         
-        Object.keys(state.audioNodes).forEach(peerId => cleanupAudioNodes(peerId));
-        state.audioNodes = {};
-        state.audioAnalyzers = {};
+        document.getElementById('audioContainer').innerHTML = '';
         
         if (state.localStream) {
             state.localStream.getTracks().forEach(track => track.stop());
             state.localStream = null;
         }
         
-        const container = document.getElementById('audioContainer');
-        if (container) container.innerHTML = '';
-        
-        if (state.audioContext) {
-            state.audioContext.close();
-            state.audioContext = null;
-        }
-        
         state.roomId = null;
         state.roomOwner = false;
         state.pendingCandidates = {};
-        state.connectionAttempts = {};
-        state.lastPollTime = 0;
         state.processedSignals.clear();
-        state.reconnectionAttempts = {};
     }
     
-    // Утилиты
     function showLoading(text = 'Загрузка...') {
-        const loading = document.getElementById('loading');
-        if (loading) {
-            loading.style.display = 'flex';
-        }
-        
-        const loadingText = document.getElementById('loadingText');
-        if (loadingText) {
-            loadingText.textContent = text;
-        }
+        document.getElementById('loading').style.display = 'flex';
+        document.getElementById('loadingText').textContent = text;
     }
     
     function hideLoading() {
-        const loading = document.getElementById('loading');
-        if (loading) {
-            loading.style.display = 'none';
-        }
+        document.getElementById('loading').style.display = 'none';
     }
     
     // Горячие клавиши
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && state.roomId) {
-            leaveRoom();
-        }
+        if (e.key === 'Escape' && state.roomId) leaveRoom();
         if (e.key === 'm' && (e.ctrlKey || e.metaKey)) {
             toggleMic();
-            e.preventDefault();
-        }
-        if (e.key === 'Enter' && document.activeElement.id === 'roomCode') {
-            joinRoom();
             e.preventDefault();
         }
     });
@@ -2008,11 +1671,8 @@
     // Обработка ввода кода
     const roomCodeInput = document.getElementById('roomCode');
     if (roomCodeInput) {
-        roomCodeInput.addEventListener('input', function(e) {
-            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (this.value.length > 6) {
-                this.value = this.value.substring(0, 6);
-            }
+        roomCodeInput.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
         });
     }
     
@@ -2025,9 +1685,7 @@
                 if (!wakeLock && state.roomId) {
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
-            } catch (err) {
-                console.log('Wake Lock error:', err);
-            }
+            } catch (err) {}
         }
         
         function releaseWakeLock() {
@@ -2045,13 +1703,6 @@
         
         window.addEventListener('beforeunload', releaseWakeLock);
     }
-    
-    // Возобновление AudioContext
-    document.addEventListener('visibilitychange', () => {
-        if (state.audioContext && document.visibilityState === 'visible') {
-            state.audioContext.resume();
-        }
-    });
 </script>
 </body>
 </html>
