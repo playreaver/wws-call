@@ -308,19 +308,21 @@
             font-weight: 500;
         }
 
-        .kick-btn {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
+        .kick-btn, .send-file-btn-card {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
             border: none;
             padding: 8px 12px;
             border-radius: 10px;
             font-size: 14px;
             cursor: pointer;
             transition: background 0.2s;
+            margin-left: 5px;
         }
 
-        .kick-btn:active {
-            background: rgba(239, 68, 68, 0.3);
+        .kick-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
         }
 
         /* File Transfer Section */
@@ -733,8 +735,6 @@
         </div>
     </div>
 
-    <div id="audioContainer"></div>
-
 <script>
     // Configuration
     const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
@@ -778,7 +778,8 @@
         files: [],
         transfers: [],
         activeTransfers: {},
-        chunkSize: 16384 // 16KB chunks for better performance
+        chunkSize: 16384,
+        pendingFiles: {} // Store files waiting for channel to open
     };
     
     // Initialize IndexedDB
@@ -828,7 +829,7 @@
     }
     
     function checkSupport() {
-        return !!(window.RTCPeerConnection && navigator.mediaDevices);
+        return !!(window.RTCPeerConnection);
     }
     
     async function checkConnection() {
@@ -874,6 +875,7 @@
     
     function setupDragAndDrop() {
         const dragArea = document.getElementById('dragArea');
+        if (!dragArea) return;
         
         dragArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -992,7 +994,7 @@
                 <div class="transfer-header">
                     <span class="transfer-sender">
                         <i class="fas ${transfer.type === 'sent' ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
-                        ${transfer.type === 'sent' ? 'Отправлено' : 'Получено'} ${transfer.from === state.userId ? 'вами' : 'от ' + (transfer.senderName || transfer.from)}
+                        ${transfer.type === 'sent' ? 'Отправлено' : 'Получено'} ${transfer.type === 'sent' ? 'вами' : 'от ' + (transfer.senderName || transfer.from)}
                     </span>
                     <span>${new Date(transfer.timestamp).toLocaleString()}</span>
                 </div>
@@ -1284,29 +1286,37 @@
                     ${escapeHtml(p.name || p.id)} ${isMe ? '(Вы)' : ''}
                 </div>
                 <div class="participant-status">
-                    <i class="fas fa-wifi"></i> В сети
+                    <i class="fas fa-wifi"></i> ${state.dataChannels[p.id]?.readyState === 'open' ? 'Соединение установлено' : 'Подключение...'}
                     ${p.isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
                 </div>
             `;
             
             const actions = document.createElement('div');
-            if (state.roomOwner && !isMe) {
+            actions.style.display = 'flex';
+            actions.style.gap = '8px';
+            
+            if (!isMe) {
                 const sendFileBtn = document.createElement('button');
-                sendFileBtn.className = 'kick-btn';
-                sendFileBtn.innerHTML = '<i class="fas fa-file-upload"></i>';
-                sendFileBtn.style.background = 'rgba(102, 126, 234, 0.2)';
-                sendFileBtn.style.color = '#667eea';
+                sendFileBtn.className = 'send-file-btn-card';
+                sendFileBtn.innerHTML = '<i class="fas fa-file-upload"></i> Отправить файл';
                 sendFileBtn.onclick = () => selectFileForUser(p.id, p.name);
                 
+                // Disable button if channel not open
+                if (state.dataChannels[p.id]?.readyState !== 'open') {
+                    sendFileBtn.style.opacity = '0.5';
+                    sendFileBtn.style.cursor = 'not-allowed';
+                    sendFileBtn.disabled = true;
+                }
+                
+                actions.appendChild(sendFileBtn);
+            }
+            
+            if (state.roomOwner && !isMe) {
                 const kickBtn = document.createElement('button');
                 kickBtn.className = 'kick-btn';
                 kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
                 kickBtn.onclick = () => kickParticipant(p.id);
-                
-                actions.appendChild(sendFileBtn);
                 actions.appendChild(kickBtn);
-                actions.style.display = 'flex';
-                actions.style.gap = '8px';
             }
             
             card.appendChild(avatar);
@@ -1333,9 +1343,12 @@
             await sendFileToUser(file, selectedUserForFile.id);
             selectedUserForFile = null;
         } else {
-            const peerIds = Object.keys(state.peerConnections);
+            const peerIds = Object.keys(state.dataChannels).filter(peerId => 
+                state.dataChannels[peerId]?.readyState === 'open'
+            );
+            
             if (peerIds.length === 0) {
-                showToast('Нет подключенных участников');
+                showToast('Нет активных подключений. Подождите, пока соединение установится...');
                 return;
             }
             
@@ -1348,8 +1361,35 @@
     
     async function sendFileToUser(file, targetUserId) {
         const dataChannel = state.dataChannels[targetUserId];
-        if (!dataChannel || dataChannel.readyState !== 'open') {
-            showToast('Соединение не установлено');
+        
+        if (!dataChannel) {
+            showToast('Соединение не установлено. Подождите...');
+            return;
+        }
+        
+        if (dataChannel.readyState !== 'open') {
+            showToast('Канал передачи данных еще не открыт. Подождите несколько секунд...');
+            // Store file to send when channel opens
+            if (!state.pendingFiles[targetUserId]) {
+                state.pendingFiles[targetUserId] = [];
+            }
+            state.pendingFiles[targetUserId].push(file);
+            
+            // Wait for channel to open
+            const checkInterval = setInterval(() => {
+                if (state.dataChannels[targetUserId]?.readyState === 'open') {
+                    clearInterval(checkInterval);
+                    const pending = state.pendingFiles[targetUserId];
+                    if (pending && pending.length) {
+                        showToast(`Отправка отложенных файлов...`);
+                        pending.forEach(f => sendFileToUser(f, targetUserId));
+                        delete state.pendingFiles[targetUserId];
+                    }
+                }
+            }, 1000);
+            
+            // Timeout after 30 seconds
+            setTimeout(() => clearInterval(checkInterval), 30000);
             return;
         }
         
@@ -1367,6 +1407,8 @@
             targetId: targetUserId
         };
         
+        showToast(`Отправка файла "${file.name}"...`);
+        
         // Read file and send chunks
         const reader = new FileReader();
         let offset = 0;
@@ -1379,21 +1421,28 @@
         reader.onload = (e) => {
             const chunkData = Array.from(new Uint8Array(e.target.result));
             
-            dataChannel.send(JSON.stringify({
-                type: 'file_chunk',
-                fileId: fileId,
-                fileName: file.name,
-                fileSize: file.size,
-                fileType: file.type,
-                chunkIndex: Math.floor(offset / state.chunkSize),
-                totalChunks: state.activeTransfers[transferId].totalChunks,
-                data: chunkData
-            }));
+            try {
+                dataChannel.send(JSON.stringify({
+                    type: 'file_chunk',
+                    fileId: fileId,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type,
+                    chunkIndex: Math.floor(offset / state.chunkSize),
+                    totalChunks: state.activeTransfers[transferId].totalChunks,
+                    data: chunkData
+                }));
+            } catch (err) {
+                console.error('Send error:', err);
+                showToast('Ошибка отправки. Попробуйте еще раз.');
+                delete state.activeTransfers[transferId];
+                return;
+            }
             
             offset += state.chunkSize;
             
             const progress = (offset / file.size) * 100;
-            updateFileProgress(fileId, progress);
+            console.log(`Progress: ${Math.round(progress)}%`);
             
             if (offset < file.size) {
                 sendNextChunk();
@@ -1413,11 +1462,15 @@
             }
         };
         
+        reader.onerror = () => {
+            showToast('Ошибка чтения файла');
+            delete state.activeTransfers[transferId];
+        };
+        
         sendNextChunk();
     }
     
     function updateFileProgress(fileId, progress) {
-        // Can be extended to show progress in UI
         console.log(`File ${fileId} progress: ${progress}%`);
     }
     
@@ -1466,6 +1519,14 @@
                 state.dataChannels[peerId] = e.channel;
             };
             
+            pc.onconnectionstatechange = () => {
+                console.log(`Connection state: ${pc.connectionState}`);
+                if (pc.connectionState === 'connected') {
+                    console.log(`Connected to ${peerId}`);
+                    renderParticipants(); // Update UI
+                }
+            };
+            
             if (state.userId < peerId) {
                 setTimeout(async () => {
                     try {
@@ -1487,17 +1548,35 @@
     function setupDataChannel(channel, peerId) {
         channel.onopen = () => {
             console.log(`Data channel open with ${peerId}`);
+            renderParticipants(); // Update UI
+            
+            // Send any pending files
+            if (state.pendingFiles[peerId] && state.pendingFiles[peerId].length) {
+                showToast(`Отправка отложенных файлов для ${peerId}...`);
+                const pending = [...state.pendingFiles[peerId]];
+                state.pendingFiles[peerId] = [];
+                pending.forEach(file => sendFileToUser(file, peerId));
+            }
         };
         
         channel.onclose = () => {
             console.log(`Data channel closed with ${peerId}`);
+            renderParticipants(); // Update UI
+        };
+        
+        channel.onerror = (err) => {
+            console.error(`Data channel error:`, err);
         };
         
         channel.onmessage = async (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'file_chunk') {
-                await handleFileChunk(data, peerId);
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'file_chunk') {
+                    await handleFileChunk(data, peerId);
+                }
+            } catch (err) {
+                console.error('Parse error:', err);
             }
         };
     }
@@ -1516,6 +1595,7 @@
                 chunks: new Array(data.totalChunks),
                 fromPeerId: fromPeerId
             };
+            showToast(`Получение файла "${data.fileName}"...`);
         }
         
         const transfer = state.activeTransfers[transferId];
@@ -1523,7 +1603,9 @@
         transfer.receivedChunks++;
         
         const progress = (transfer.receivedChunks / transfer.totalChunks) * 100;
-        updateFileProgress(transferId, progress);
+        if (transfer.receivedChunks % 10 === 0 || transfer.receivedChunks === transfer.totalChunks) {
+            console.log(`Received ${transfer.receivedChunks}/${transfer.totalChunks} chunks (${Math.round(progress)}%)`);
+        }
         
         if (transfer.receivedChunks === transfer.totalChunks) {
             // All chunks received, assemble file
@@ -1574,6 +1656,9 @@
         }
         if (state.dataChannels[peerId]) {
             delete state.dataChannels[peerId];
+        }
+        if (state.pendingFiles[peerId]) {
+            delete state.pendingFiles[peerId];
         }
     }
     
@@ -1628,6 +1713,12 @@
                 case 'candidate':
                     await handleCandidate(signal.from, signal.data);
                     break;
+                case 'kicked':
+                    if (signal.to === state.userId) {
+                        showToast('Вас удалили из комнаты');
+                        leaveRoom();
+                    }
+                    break;
             }
         } catch (error) {
             console.error(`Signal error:`, error);
@@ -1660,10 +1751,6 @@
             pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            const dataChannel = pc.createDataChannel('fileTransfer');
-            setupDataChannel(dataChannel, peerId);
-            state.dataChannels[peerId] = dataChannel;
-            
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
                     sendSignal(peerId, 'candidate', e.candidate);
@@ -1671,6 +1758,7 @@
             };
             
             pc.ondatachannel = (e) => {
+                console.log(`Data channel received from ${peerId}`);
                 setupDataChannel(e.channel, peerId);
                 state.dataChannels[peerId] = e.channel;
             };
@@ -1781,6 +1869,7 @@
         state.peerConnections = {};
         state.dataChannels = {};
         state.activeTransfers = {};
+        state.pendingFiles = {};
         
         state.roomId = null;
         state.roomOwner = false;
@@ -1803,12 +1892,18 @@
     }
     
     function showLoading(text = 'Загрузка...') {
-        document.getElementById('loading').style.display = 'flex';
-        document.getElementById('loadingText').textContent = text;
+        const loading = document.getElementById('loading');
+        if (loading) {
+            loading.style.display = 'flex';
+            document.getElementById('loadingText').textContent = text;
+        }
     }
     
     function hideLoading() {
-        document.getElementById('loading').style.display = 'none';
+        const loading = document.getElementById('loading');
+        if (loading) {
+            loading.style.display = 'none';
+        }
     }
     
     document.getElementById('roomCode')?.addEventListener('input', function() {
