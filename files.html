@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>P2P File Transfer</title>
+    <title>DropShare • P2P файлы</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap">
     <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
     <style>
         * {
@@ -17,11 +17,31 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #000;
+            background: #0a0a0a;
             color: #fff;
             height: 100vh;
             overflow: hidden;
             position: relative;
+        }
+
+        .scrollable {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+
+        .scrollable::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .scrollable::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        .scrollable::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
         }
 
         .app {
@@ -32,79 +52,120 @@
             bottom: 0;
             display: flex;
             flex-direction: column;
-            background: #000;
+            background: linear-gradient(145deg, #0a0a0a 0%, #0f0f0f 100%);
         }
 
         .screen {
             flex: 1;
             display: none;
             flex-direction: column;
-            background: #000;
+            animation: fadeIn 0.3s ease;
         }
 
         .screen.active {
             display: flex;
         }
 
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .home-screen {
-            padding: 40px 20px;
+            padding: 24px 20px;
             align-items: center;
             justify-content: center;
-            gap: 40px;
+            gap: 48px;
         }
 
         .logo {
             text-align: center;
+            animation: slideUp 0.5s ease;
+        }
+
+        .logo-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            box-shadow: 0 20px 35px -12px rgba(102,126,234,0.3);
+        }
+
+        .logo-icon i {
+            font-size: 40px;
+            color: white;
         }
 
         .logo h1 {
-            font-size: 48px;
+            font-size: 32px;
             font-weight: 700;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .logo p {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 16px;
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
         }
 
-        .call-actions {
+        .action-cards {
+            width: 100%;
+            max-width: 340px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            width: 100%;
-            max-width: 300px;
+            gap: 16px;
+        }
+
+        .create-card, .join-card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 28px;
+            padding: 20px;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .create-card {
+            background: linear-gradient(135deg, rgba(102,126,234,0.15), rgba(118,75,162,0.15));
+            border: 1px solid rgba(102,126,234,0.3);
         }
 
         .create-btn {
             width: 100%;
-            height: 60px;
             background: linear-gradient(135deg, #667eea, #764ba2);
             border: none;
-            border-radius: 15px;
+            border-radius: 20px;
+            padding: 16px;
             color: white;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
-            transition: transform 0.2s;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
         }
 
         .create-btn:active {
-            transform: scale(0.98);
+            transform: scale(0.97);
+            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
         }
 
         .divider {
             display: flex;
             align-items: center;
-            gap: 15px;
-            color: rgba(255, 255, 255, 0.4);
+            gap: 12px;
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+            margin: 16px 0;
         }
 
         .divider::before,
@@ -112,73 +173,98 @@
             content: '';
             flex: 1;
             height: 1px;
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .join-section {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            background: rgba(255,255,255,0.1);
         }
 
         .join-input {
             width: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 15px;
-            padding: 15px 20px;
+            background: rgba(255,255,255,0.08);
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 16px 20px;
             color: white;
             font-size: 16px;
             text-align: center;
+            font-weight: 500;
+            letter-spacing: 2px;
             outline: none;
+            transition: all 0.2s;
+        }
+
+        .join-input:focus {
+            border-color: #667eea;
+            background: rgba(255,255,255,0.12);
         }
 
         .join-input::placeholder {
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255,255,255,0.4);
+            letter-spacing: normal;
         }
 
         .join-btn {
             width: 100%;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            border-radius: 15px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            padding: 14px;
             color: white;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 500;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            margin-top: 12px;
         }
 
         .join-btn:active {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255,255,255,0.15);
+            transform: scale(0.98);
+        }
+
+        .badge {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            color: rgba(255,255,255,0.3);
+            font-size: 11px;
         }
 
         .main-screen {
-            background: #000;
-            position: relative;
+            background: #0a0a0a;
         }
 
         .header {
-            padding: 15px 20px;
-            background: rgba(0, 0, 0, 0.9);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px 20px;
+            background: rgba(10,10,10,0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         .room-info {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+            flex: 1;
+        }
+
+        .room-label {
+            font-size: 11px;
+            color: rgba(255,255,255,0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .room-code-display {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 22px;
+            font-weight: 700;
             font-family: 'Monaco', 'Courier New', monospace;
             letter-spacing: 3px;
+            background: linear-gradient(135deg, #fff, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .room-actions {
@@ -187,41 +273,45 @@
         }
 
         .action-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
             color: white;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 18px;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
 
         .action-btn:active {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .action-btn.share {
-            background: #667eea;
+            transform: scale(0.94);
+            background: rgba(255,255,255,0.15);
         }
 
         .tabs {
             display: flex;
-            background: rgba(0, 0, 0, 0.9);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            gap: 8px;
+            background: rgba(10,10,10,0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: sticky;
+            top: 73px;
+            z-index: 10;
         }
 
         .tab {
             flex: 1;
-            padding: 15px;
-            background: none;
+            padding: 12px;
+            background: rgba(255,255,255,0.04);
             border: none;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 16px;
+            border-radius: 60px;
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
@@ -231,53 +321,60 @@
             gap: 8px;
         }
 
+        .tab i {
+            font-size: 14px;
+        }
+
         .tab.active {
-            color: #667eea;
-            border-bottom: 2px solid #667eea;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
         }
 
         .tab-content {
             flex: 1;
             display: none;
-            overflow-y: auto;
             padding: 20px;
         }
 
         .tab-content.active {
             display: block;
+            animation: fadeIn 0.2s ease;
         }
 
         .participants-list {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
         }
 
         .participant-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 24px;
+            padding: 16px;
             display: flex;
             align-items: center;
-            gap: 15px;
-            transition: all 0.3s ease;
+            gap: 14px;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
         }
 
         .participant-card.me {
-            background: rgba(102, 126, 234, 0.1);
-            border: 1px solid rgba(102, 126, 234, 0.3);
+            background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+            border-color: rgba(102,126,234,0.3);
         }
 
         .participant-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+            border-radius: 26px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
             font-weight: 600;
             flex-shrink: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
         }
 
         .participant-info {
@@ -286,118 +383,162 @@
 
         .participant-name {
             font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 3px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .participant-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             font-size: 12px;
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255,255,255,0.5);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background: #10b981;
+        }
+
+        .status-dot.connecting {
+            background: #f59e0b;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .participant-badge {
-            background: rgba(102, 126, 234, 0.2);
-            color: #667eea;
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 11px;
+            background: rgba(102,126,234,0.2);
+            color: #a78bfa;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 10px;
             font-weight: 500;
         }
 
-        .kick-btn, .send-file-btn-card {
-            background: rgba(102, 126, 234, 0.2);
-            color: #667eea;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 10px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.2s;
-            margin-left: 5px;
-        }
-
-        .kick-btn {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .file-actions {
+        .action-group {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .send-file-btn {
-            flex: 1;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border: none;
-            border-radius: 12px;
-            padding: 12px;
-            color: white;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             gap: 8px;
         }
 
-        .drag-area {
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-bottom: 20px;
-        }
-
-        .drag-area.drag-over {
-            background: rgba(102, 126, 234, 0.1);
-            border-color: #667eea;
-        }
-
-        .drag-area i {
-            font-size: 48px;
-            color: rgba(255, 255, 255, 0.4);
-            margin-bottom: 10px;
-        }
-
-        .drag-area p {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
-        }
-
-        .files-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .file-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 15px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .file-icon {
+        .icon-btn {
             width: 40px;
             height: 40px;
-            background: rgba(102, 126, 234, 0.2);
-            border-radius: 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.08);
+            border: none;
+            color: white;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            color: #667eea;
+            font-size: 16px;
+            transition: all 0.2s;
         }
 
-        .file-info {
+        .icon-btn:active {
+            transform: scale(0.92);
+        }
+
+        .icon-btn.send {
+            background: rgba(102,126,234,0.2);
+            color: #a78bfa;
+        }
+
+        .icon-btn.kick {
+            background: rgba(239,68,68,0.15);
+            color: #f87171;
+        }
+
+        .file-zone {
+            background: rgba(255,255,255,0.04);
+            border: 2px dashed rgba(255,255,255,0.15);
+            border-radius: 28px;
+            padding: 32px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 24px;
+        }
+
+        .file-zone.drag-over {
+            border-color: #667eea;
+            background: rgba(102,126,234,0.1);
+            transform: scale(0.98);
+        }
+
+        .file-zone i {
+            font-size: 48px;
+            color: rgba(255,255,255,0.3);
+            margin-bottom: 12px;
+        }
+
+        .file-zone p {
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+        }
+
+        .file-zone .small {
+            font-size: 12px;
+            margin-top: 8px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .send-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 60px;
+            padding: 16px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .files-list, .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .file-card, .history-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+        }
+
+        .file-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(102,126,234,0.15);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #a78bfa;
+        }
+
+        .file-details {
             flex: 1;
             min-width: 0;
         }
@@ -413,95 +554,84 @@
 
         .file-meta {
             font-size: 11px;
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255,255,255,0.4);
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
 
-        .file-progress {
-            margin-top: 8px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .file-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.3s;
-        }
-
-        .file-actions-btns {
+        .file-actions {
             display: flex;
             gap: 8px;
         }
 
-        .file-btn {
-            background: rgba(255, 255, 255, 0.1);
+        .mini-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.08);
             border: none;
-            border-radius: 8px;
-            padding: 8px;
             color: white;
             cursor: pointer;
-            font-size: 12px;
-            transition: background 0.2s;
-        }
-
-        .file-btn.download {
-            background: rgba(102, 126, 234, 0.3);
-        }
-
-        .file-btn.delete {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        .transfer-item {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 10px;
-        }
-
-        .transfer-header {
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 12px;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
         }
 
-        .transfer-sender {
-            color: #667eea;
+        .mini-btn.download {
+            background: rgba(102,126,234,0.2);
+            color: #a78bfa;
         }
 
-        .transfer-name {
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 4px;
+        .mini-btn.delete {
+            background: rgba(239,68,68,0.15);
+            color: #f87171;
+        }
+
+        .progress-bar {
+            margin-top: 8px;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s;
         }
 
         .bottom-bar {
-            padding: 20px;
-            background: rgba(0, 0, 0, 0.9);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px 20px;
+            background: rgba(10,10,10,0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255,255,255,0.08);
             display: flex;
             justify-content: center;
         }
 
         .leave-btn {
-            background: #ef4444;
-            border: none;
-            border-radius: 12px;
-            padding: 12px 24px;
-            color: white;
-            font-size: 16px;
+            background: rgba(239,68,68,0.2);
+            border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 60px;
+            padding: 14px 28px;
+            color: #f87171;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        .leave-btn:active {
+            transform: scale(0.96);
+            background: rgba(239,68,68,0.3);
         }
 
         .toast {
@@ -509,17 +639,17 @@
             bottom: 100px;
             left: 50%;
             transform: translateX(-50%) translateY(20px);
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0,0,0,0.9);
             backdrop-filter: blur(20px);
             padding: 12px 20px;
-            border-radius: 12px;
-            font-size: 14px;
+            border-radius: 60px;
+            font-size: 13px;
             opacity: 0;
             transition: all 0.3s ease;
-            z-index: 1000;
-            max-width: 90%;
-            text-align: center;
+            z-index: 2000;
+            white-space: nowrap;
             pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
         .toast.show {
@@ -533,19 +663,20 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: #000;
+            background: rgba(0,0,0,0.95);
+            backdrop-filter: blur(20px);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 3000;
             flex-direction: column;
             gap: 20px;
         }
 
         .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
+            width: 44px;
+            height: 44px;
+            border: 3px solid rgba(255,255,255,0.1);
             border-top-color: #667eea;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -555,68 +686,65 @@
             to { transform: rotate(360deg); }
         }
 
-        .connection-status {
+        .conn-status {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
+            top: 12px;
+            right: 12px;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
             padding: 6px 12px;
             border-radius: 20px;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.8);
+            font-size: 10px;
             display: flex;
             align-items: center;
             gap: 6px;
             z-index: 100;
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
-        .connection-dot {
+        .conn-dot {
             width: 8px;
             height: 8px;
-            border-radius: 50%;
+            border-radius: 4px;
         }
 
-        .connection-dot.connected {
+        .conn-dot.online {
             background: #10b981;
+            box-shadow: 0 0 8px #10b981;
         }
 
-        .connection-dot.disconnected {
+        .conn-dot.offline {
             background: #ef4444;
         }
 
-        .tab-content::-webkit-scrollbar {
-            width: 6px;
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: rgba(255,255,255,0.3);
         }
 
-        .tab-content::-webkit-scrollbar-track {
-            background: transparent;
+        .empty-state i {
+            font-size: 56px;
+            margin-bottom: 16px;
+            opacity: 0.5;
         }
 
-        .tab-content::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
+        .empty-state p {
+            font-size: 14px;
         }
 
-        @media (max-width: 768px) {
-            .logo h1 { font-size: 36px; }
-            .room-code-display { font-size: 20px; }
-            .file-name { font-size: 13px; }
-        }
-
-        .progress-bar-container {
-            width: 100%;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.3s;
+        @media (max-width: 480px) {
+            .home-screen { padding: 20px 16px; }
+            .logo-icon { width: 70px; height: 70px; border-radius: 24px; }
+            .logo-icon i { font-size: 32px; }
+            .logo h1 { font-size: 28px; }
+            .action-cards { max-width: 100%; }
+            .participant-card { padding: 12px; }
+            .participant-avatar { width: 44px; height: 44px; font-size: 16px; }
+            .tab { padding: 10px; font-size: 12px; }
+            .tab-content { padding: 16px; }
+            .room-code-display { font-size: 18px; }
+            .toast { white-space: normal; max-width: 80%; text-align: center; }
         }
     </style>
 </head>
@@ -626,9 +754,9 @@
         <div id="loadingText">Подключение...</div>
     </div>
 
-    <div class="connection-status" id="connectionStatus" style="display: none;">
-        <div class="connection-dot disconnected"></div>
-        <span>Отключен</span>
+    <div class="conn-status" id="connStatus" style="display: none;">
+        <div class="conn-dot offline"></div>
+        <span>Офлайн</span>
     </div>
 
     <div class="toast" id="toast"></div>
@@ -636,21 +764,26 @@
     <div class="app" id="app">
         <div class="screen home-screen active" id="homeScreen">
             <div class="logo">
-                <h1><i class="fas fa-file-transfer"></i> FileShare</h1>
-                <p>P2P передача файлов напрямую</p>
+                <div class="logo-icon">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h1>DropShare</h1>
+                <p>Мгновенный обмен файлами</p>
             </div>
 
-            <div class="call-actions">
-                <button class="create-btn" onclick="createRoom()">
-                    <i class="fas fa-plus-circle"></i>
-                    Создать комнату
-                </button>
+            <div class="action-cards">
+                <div class="create-card">
+                    <button class="create-btn" onclick="createRoom()">
+                        <i class="fas fa-plus-circle"></i>
+                        Создать комнату
+                    </button>
+                </div>
 
-                <div class="divider">или</div>
+                <div class="divider">или введите код</div>
 
-                <div class="join-section">
+                <div class="join-card">
                     <input type="text" class="join-input" id="roomCode" 
-                           placeholder="Введите код комнаты" maxlength="6" 
+                           placeholder="XXXXXX" maxlength="6" 
                            onkeypress="if(event.key=='Enter') joinRoom()">
                     <button class="join-btn" onclick="joinRoom()">
                         <i class="fas fa-sign-in-alt"></i>
@@ -659,700 +792,487 @@
                 </div>
             </div>
 
-            <div style="margin-top: 20px; color: rgba(255, 255, 255, 0.4); font-size: 12px; text-align: center;">
-                <p><i class="fas fa-shield-alt"></i> P2P шифрование • Файлы передаются напрямую • Без сервера</p>
+            <div class="badge">
+                <span><i class="fas fa-shield-alt"></i> P2P шифрование</span>
+                <span><i class="fas fa-bolt"></i> Мгновенно</span>
+                <span><i class="fas fa-mobile-alt"></i> Без регистрации</span>
             </div>
         </div>
 
         <div class="screen main-screen" id="mainScreen">
             <div class="header">
                 <div class="room-info">
-                    <div style="font-size: 12px; color: rgba(255, 255, 255, 0.6);">
-                        <i class="fas fa-hashtag"></i> Код комнаты
-                    </div>
+                    <div class="room-label">Код комнаты</div>
                     <div class="room-code-display" id="currentRoomCode">------</div>
                 </div>
-                
                 <div class="room-actions">
-                    <button class="action-btn share" onclick="shareRoomCode()">
-                        <i class="fas fa-share-alt"></i>
-                    </button>
                     <button class="action-btn" onclick="copyRoomCode()">
                         <i class="fas fa-copy"></i>
+                    </button>
+                    <button class="action-btn share" onclick="shareRoomCode()">
+                        <i class="fas fa-share-alt"></i>
                     </button>
                 </div>
             </div>
 
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('participants')">
+                <button class="tab active" onclick="switchTab('users')">
                     <i class="fas fa-users"></i> Участники
                 </button>
                 <button class="tab" onclick="switchTab('files')">
                     <i class="fas fa-folder"></i> Файлы
                 </button>
                 <button class="tab" onclick="switchTab('history')">
-                    <i class="fas fa-history"></i> История
+                    <i class="fas fa-clock"></i> История
                 </button>
             </div>
 
-            <div class="tab-content active" id="participantsTab">
+            <div class="tab-content active scrollable" id="usersTab">
                 <div class="participants-list" id="participantsList"></div>
             </div>
 
-            <div class="tab-content" id="filesTab">
-                <div class="file-actions">
-                    <button class="send-file-btn" onclick="document.getElementById('fileInput').click()">
-                        <i class="fas fa-cloud-upload-alt"></i> Выбрать файл
-                    </button>
-                </div>
+            <div class="tab-content scrollable" id="filesTab">
+                <button class="send-btn" onclick="document.getElementById('fileInput').click()">
+                    <i class="fas fa-cloud-upload-alt"></i> Выбрать файл
+                </button>
                 <input type="file" id="fileInput" style="display: none" onchange="handleFiles(this.files)">
                 
-                <div class="drag-area" id="dragArea" onclick="document.getElementById('fileInput').click()">
+                <div class="file-zone" id="fileZone" onclick="document.getElementById('fileInput').click()">
                     <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Перетащите файлы сюда или нажмите для выбора</p>
+                    <p>Перетащите файл сюда</p>
+                    <div class="small">или нажмите для выбора</div>
                 </div>
 
                 <div class="files-list" id="filesList"></div>
             </div>
 
-            <div class="tab-content" id="historyTab">
-                <div id="historyList"></div>
+            <div class="tab-content scrollable" id="historyTab">
+                <div class="history-list" id="historyList"></div>
             </div>
 
             <div class="bottom-bar">
                 <button class="leave-btn" onclick="leaveRoom()">
-                    <i class="fas fa-sign-out-alt"></i> Выйти из комнаты
+                    <i class="fas fa-sign-out-alt"></i> Выйти
                 </button>
             </div>
         </div>
     </div>
 
-<script>
-    const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
-    
-    const config = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' },
-            { 
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            },
-            { 
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
+    <script>
+        const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
+
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+                { 
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                { 
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
+            ],
+            iceCandidatePoolSize: 10
+        };
+
+        const state = {
+            userId: null,
+            userName: null,
+            roomId: null,
+            roomOwner: false,
+            peerConnections: {},
+            dataChannels: {},
+            participants: [],
+            files: [],
+            transfers: [],
+            activeTransfers: {},
+            pendingFiles: {},
+            sendingQueue: {},
+            sendingInProgress: {},
+            pendingCandidates: {},
+            processedSignals: new Set(),
+            lastPollTime: 0,
+            chunkSize: 16384,
+            updateInterval: null,
+            signalInterval: null
+        };
+
+        const fileStore = localforage.createInstance({ name: "DropShare", storeName: "files" });
+        const historyStore = localforage.createInstance({ name: "DropShare", storeName: "history" });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            init();
+            setupDragAndDrop();
+        });
+
+        async function init() {
+            state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            state.userName = generateName();
+            
+            await loadFiles();
+            await loadHistory();
+            
+            if (!window.RTCPeerConnection) {
+                showToast('Ваш браузер не поддерживает P2P передачу', 5000);
+                document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
+                return;
             }
-        ],
-        iceCandidatePoolSize: 10
-    };
-    
-    const state = {
-        userId: null,
-        userName: null,
-        roomId: null,
-        roomOwner: false,
-        peerConnections: {},
-        dataChannels: {},
-        signalInterval: null,
-        updateInterval: null,
-        participants: [],
-        pendingCandidates: {},
-        processedSignals: new Set(),
-        lastPollTime: 0,
-        files: [],
-        transfers: [],
-        activeTransfers: {},
-        chunkSize: 16384,
-        pendingFiles: {},
-        sendingQueue: {},
-        sendingInProgress: {}
-    };
-    
-    const fileStore = localforage.createInstance({ name: "P2PFileTransfer", storeName: "files" });
-    const historyStore = localforage.createInstance({ name: "P2PFileTransfer", storeName: "history" });
-    
-    document.addEventListener('DOMContentLoaded', init);
-    
-    async function init() {
-        state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        state.userName = generateName();
-        
-        await loadFiles();
-        await loadHistory();
-        
-        if (!checkSupport()) {
-            showToast('Ваш браузер не поддерживает P2P передачу файлов', 5000);
-            document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
-            return;
+            
+            await checkConnection();
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, 800);
         }
-        
-        await checkConnection();
-        setupDragAndDrop();
-        
-        setTimeout(() => {
+
+        function generateName() {
+            const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Анна', 'Мария', 'Екатерина'];
+            const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Волков'];
+            return `${names[Math.floor(Math.random() * names.length)]} ${surnames[Math.floor(Math.random() * surnames.length)]}`;
+        }
+
+        async function checkConnection() {
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'ping' })
+                });
+                updateConnectionStatus(res.ok);
+                return res.ok;
+            } catch {
+                updateConnectionStatus(false);
+                return false;
+            }
+        }
+
+        function updateConnectionStatus(online) {
+            const status = document.getElementById('connStatus');
+            if (!status) return;
+            status.style.display = 'flex';
+            const dot = status.querySelector('.conn-dot');
+            const text = status.querySelector('span');
+            dot.className = online ? 'conn-dot online' : 'conn-dot offline';
+            text.textContent = online ? 'Online' : 'Offline';
+        }
+
+        function showToast(msg, duration = 2500) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration);
+        }
+
+        function showLoading(text = 'Загрузка...') {
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('loadingText').textContent = text;
+        }
+
+        function hideLoading() {
             document.getElementById('loading').style.display = 'none';
-        }, 1000);
-    }
-    
-    function generateName() {
-        const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария'];
-        const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов'];
-        return `${names[Math.floor(Math.random() * names.length)]} ${surnames[Math.floor(Math.random() * surnames.length)]}`;
-    }
-    
-    function checkSupport() {
-        return !!(window.RTCPeerConnection);
-    }
-    
-    async function checkConnection() {
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'ping' })
-            });
-            updateConnectionStatus(response.ok);
-            return response.ok;
-        } catch (error) {
-            updateConnectionStatus(false);
-            return false;
         }
-    }
-    
-    function updateConnectionStatus(connected) {
-        const status = document.getElementById('connectionStatus');
-        if (!status) return;
-        const dot = status.querySelector('.connection-dot');
-        const text = status.querySelector('span');
-        status.style.display = 'flex';
-        dot.className = connected ? 'connection-dot connected' : 'connection-dot disconnected';
-        text.textContent = connected ? 'Подключено' : 'Отключено';
-    }
-    
-    function showScreen(screenId) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById(screenId).classList.add('active');
-    }
-    
-    function showToast(message, duration = 3000) {
-        const toast = document.getElementById('toast');
-        if (!toast) return;
-        toast.textContent = message;
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), duration);
-    }
-    
-    function setupDragAndDrop() {
-        const dragArea = document.getElementById('dragArea');
-        if (!dragArea) return;
-        dragArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dragArea.classList.add('drag-over');
-        });
-        dragArea.addEventListener('dragleave', () => dragArea.classList.remove('drag-over'));
-        dragArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dragArea.classList.remove('drag-over');
-            handleFiles(e.dataTransfer.files);
-        });
-    }
-    
-    async function loadFiles() {
-        try {
+
+        function setupDragAndDrop() {
+            const zone = document.getElementById('fileZone');
+            if (!zone) return;
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                handleFiles(e.dataTransfer.files);
+            });
+        }
+
+        async function loadFiles() {
             const keys = await fileStore.keys();
             state.files = [];
             for (const key of keys) {
-                const fileData = await fileStore.getItem(key);
-                if (fileData) state.files.push(fileData);
+                const file = await fileStore.getItem(key);
+                if (file) state.files.push(file);
             }
             renderFiles();
-        } catch (error) {
-            console.error('Error loading files:', error);
         }
-    }
-    
-    async function loadHistory() {
-        try {
+
+        async function loadHistory() {
             const history = await historyStore.getItem('transfers');
             if (history) {
                 state.transfers = history;
                 renderHistory();
             }
-        } catch (error) {
-            console.error('Error loading history:', error);
         }
-    }
-    
-    async function saveFile(fileData) {
-        try {
+
+        async function saveFile(fileData) {
             await fileStore.setItem(fileData.id, fileData);
             state.files.push(fileData);
             renderFiles();
-            return true;
-        } catch (error) {
-            console.error('Error saving file:', error);
-            return false;
         }
-    }
-    
-    async function saveTransfer(transfer) {
-        try {
+
+        async function saveTransfer(transfer) {
             state.transfers.unshift(transfer);
             if (state.transfers.length > 100) state.transfers = state.transfers.slice(0, 100);
             await historyStore.setItem('transfers', state.transfers);
             renderHistory();
-        } catch (error) {
-            console.error('Error saving transfer:', error);
         }
-    }
-    
-    function renderFiles() {
-        const container = document.getElementById('filesList');
-        if (!container) return;
-        if (state.files.length === 0) {
-            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-folder-open" style="font-size: 48px;"></i><p>Нет сохраненных файлов</p></div>';
-            return;
-        }
-        container.innerHTML = state.files.map(file => `
-            <div class="file-card">
-                <div class="file-icon"><i class="fas ${getFileIcon(file.type)}"></i></div>
-                <div class="file-info">
-                    <div class="file-name">${escapeHtml(file.name)}</div>
-                    <div class="file-meta">
-                        <span>${formatFileSize(file.size)}</span>
-                        <span>${new Date(file.savedAt).toLocaleString()}</span>
+
+        function renderFiles() {
+            const container = document.getElementById('filesList');
+            if (!container) return;
+            if (state.files.length === 0) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-folder-open"></i><p>Нет сохраненных файлов</p></div>`;
+                return;
+            }
+            container.innerHTML = state.files.map(file => `
+                <div class="file-card">
+                    <div class="file-icon"><i class="fas ${getFileIcon(file.type)}"></i></div>
+                    <div class="file-details">
+                        <div class="file-name">${escapeHtml(file.name)}</div>
+                        <div class="file-meta">${formatSize(file.size)} • ${new Date(file.savedAt).toLocaleTimeString()}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="mini-btn download" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i></button>
+                        <button class="mini-btn delete" onclick="deleteFile('${file.id}')"><i class="fas fa-trash"></i></button>
                     </div>
                 </div>
-                <div class="file-actions-btns">
-                    <button class="file-btn download" onclick="downloadFile('${file.id}')"><i class="fas fa-download"></i></button>
-                    <button class="file-btn delete" onclick="deleteFile('${file.id}')"><i class="fas fa-trash"></i></button>
-                </div>
-            </div>
-        `).join('');
-    }
-    
-    function renderHistory() {
-        const container = document.getElementById('historyList');
-        if (!container) return;
-        if (state.transfers.length === 0) {
-            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-history" style="font-size: 48px;"></i><p>История передач пуста</p></div>';
-            return;
+            `).join('');
         }
-        container.innerHTML = state.transfers.map(transfer => `
-            <div class="transfer-item">
-                <div class="transfer-header">
-                    <span class="transfer-sender">
-                        <i class="fas ${transfer.type === 'sent' ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
-                        ${transfer.type === 'sent' ? 'Отправлено' : 'Получено'} ${transfer.type === 'sent' ? 'вами' : 'от ' + (transfer.senderName || transfer.from)}
-                    </span>
-                    <span>${new Date(transfer.timestamp).toLocaleString()}</span>
-                </div>
-                <div class="transfer-name">${escapeHtml(transfer.fileName)}</div>
-                <div class="file-meta">${formatFileSize(transfer.fileSize)}</div>
-            </div>
-        `).join('');
-    }
-    
-    function getFileIcon(mimeType) {
-        if (mimeType?.startsWith('image/')) return 'fa-image';
-        if (mimeType?.startsWith('video/')) return 'fa-video';
-        if (mimeType?.startsWith('audio/')) return 'fa-music';
-        if (mimeType?.includes('pdf')) return 'fa-file-pdf';
-        return 'fa-file';
-    }
-    
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-    
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-    
-    async function downloadFile(fileId) {
-        const file = state.files.find(f => f.id === fileId);
-        if (!file) return;
-        const blob = new Blob([new Uint8Array(file.data)], { type: file.type });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-    
-    async function deleteFile(fileId) {
-        if (!confirm('Удалить файл?')) return;
-        await fileStore.removeItem(fileId);
-        state.files = state.files.filter(f => f.id !== fileId);
-        renderFiles();
-        showToast('Файл удален');
-    }
-    
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        if (tabName === 'participants') {
-            document.querySelector('.tabs button:first-child').classList.add('active');
-            document.getElementById('participantsTab').classList.add('active');
-        } else if (tabName === 'files') {
-            document.querySelector('.tabs button:nth-child(2)').classList.add('active');
-            document.getElementById('filesTab').classList.add('active');
-        } else if (tabName === 'history') {
-            document.querySelector('.tabs button:nth-child(3)').classList.add('active');
-            document.getElementById('historyTab').classList.add('active');
-        }
-    }
-    
-    async function createRoom() {
-        showLoading('Создание комнаты...');
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'createRoom', userId: state.userId, userName: state.userName })
-            });
-            const data = await response.json();
-            if (data.success) {
-                state.roomId = data.roomId;
-                state.roomOwner = true;
-                await startSession();
-                showToast('Комната создана! Код скопирован');
-            } else {
-                throw new Error(data.error);
+
+        function renderHistory() {
+            const container = document.getElementById('historyList');
+            if (!container) return;
+            if (state.transfers.length === 0) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-history"></i><p>История пуста</p></div>`;
+                return;
             }
-        } catch (error) {
-            showToast('Ошибка создания комнаты');
-        } finally {
-            hideLoading();
+            container.innerHTML = state.transfers.map(t => `
+                <div class="history-card">
+                    <div class="file-icon"><i class="fas ${t.type === 'sent' ? 'fa-arrow-up' : 'fa-arrow-down'}"></i></div>
+                    <div class="file-details">
+                        <div class="file-name">${escapeHtml(t.fileName)}</div>
+                        <div class="file-meta">${formatSize(t.fileSize)} • ${t.type === 'sent' ? 'Отправлено' : 'Получено'} ${new Date(t.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `).join('');
         }
-    }
-    
-    async function joinRoom() {
-        const code = document.getElementById('roomCode').value.trim().toUpperCase();
-        if (!code || code.length !== 6) {
-            showToast('Введите 6-значный код');
-            return;
-        }
-        showLoading('Присоединение...');
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'joinRoom', roomId: code, userId: state.userId, userName: state.userName })
-            });
-            const data = await response.json();
-            if (data.success) {
-                state.roomId = code;
-                state.roomOwner = false;
-                await startSession();
-                showToast('Присоединились к комнате');
-            } else {
-                throw new Error(data.error);
+
+        function renderParticipants() {
+            const container = document.getElementById('participantsList');
+            if (!container) return;
+            if (state.participants.length === 0) {
+                container.innerHTML = `<div class="empty-state"><i class="fas fa-users"></i><p>Ожидание участников...</p></div>`;
+                return;
             }
-        } catch (error) {
-            showToast('Ошибка присоединения');
-        } finally {
-            hideLoading();
+            container.innerHTML = state.participants.map(p => {
+                const isMe = p.id === state.userId;
+                const channelState = state.dataChannels[p.id]?.readyState;
+                const isConnected = channelState === 'open';
+                return `
+                    <div class="participant-card ${isMe ? 'me' : ''}">
+                        <div class="participant-avatar" style="background: ${getColor(p.id)}">${getInitials(p.name || p.id)}</div>
+                        <div class="participant-info">
+                            <div class="participant-name">
+                                ${escapeHtml(p.name || p.id)} ${isMe ? '(Вы)' : ''}
+                                ${p.isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
+                            </div>
+                            <div class="participant-status">
+                                <div class="status-dot ${isConnected ? '' : 'connecting'}"></div>
+                                ${isConnected ? 'Соединение активно' : 'Подключение...'}
+                            </div>
+                        </div>
+                        ${!isMe ? `
+                            <div class="action-group">
+                                <button class="icon-btn send" onclick="selectFileForUser('${p.id}', '${escapeHtml(p.name)}')" ${!isConnected ? 'disabled style="opacity:0.5"' : ''}>
+                                    <i class="fas fa-file-upload"></i>
+                                </button>
+                                ${state.roomOwner ? `<button class="icon-btn kick" onclick="kickParticipant('${p.id}')"><i class="fas fa-user-slash"></i></button>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
         }
-    }
-    
-    async function startSession() {
-        showScreen('mainScreen');
-        document.getElementById('currentRoomCode').textContent = state.roomId;
-        if (state.roomOwner) setTimeout(() => copyRoomCode(), 500);
-        startUpdates();
-        await updateParticipants();
-    }
-    
-    async function copyRoomCode() {
-        if (!state.roomId) return;
-        await navigator.clipboard.writeText(state.roomId);
-        showToast('Код скопирован');
-    }
-    
-    async function shareRoomCode() {
-        if (!state.roomId) return;
-        if (navigator.share) {
+
+        function getFileIcon(type) {
+            if (type?.startsWith('image/')) return 'fa-image';
+            if (type?.startsWith('video/')) return 'fa-video';
+            if (type?.startsWith('audio/')) return 'fa-music';
+            return 'fa-file';
+        }
+
+        function formatSize(bytes) {
+            if (!bytes) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function downloadFile(id) {
+            const file = state.files.find(f => f.id === id);
+            if (!file) return;
+            const blob = new Blob([new Uint8Array(file.data)], { type: file.type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function deleteFile(id) {
+            if (!confirm('Удалить файл?')) return;
+            await fileStore.removeItem(id);
+            state.files = state.files.filter(f => f.id !== id);
+            renderFiles();
+            showToast('Файл удален');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'users') {
+                document.querySelector('.tab:first-child').classList.add('active');
+                document.getElementById('usersTab').classList.add('active');
+            } else if (tab === 'files') {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('filesTab').classList.add('active');
+            } else if (tab === 'history') {
+                document.querySelector('.tab:nth-child(3)').classList.add('active');
+                document.getElementById('historyTab').classList.add('active');
+            }
+        }
+
+        async function createRoom() {
+            showLoading('Создание комнаты...');
             try {
-                await navigator.share({ title: 'Присоединиться к P2P передаче файлов', text: `Код комнаты: ${state.roomId}` });
-            } catch (error) {
-                if (error.name !== 'AbortError') copyRoomCode();
-            }
-        } else {
-            copyRoomCode();
-        }
-    }
-    
-    function startUpdates() {
-        if (state.updateInterval) clearInterval(state.updateInterval);
-        if (state.signalInterval) clearInterval(state.signalInterval);
-        state.updateInterval = setInterval(updateParticipants, 3000);
-        state.signalInterval = setInterval(pollSignals, 1000);
-        setTimeout(() => { updateParticipants(); pollSignals(); }, 500);
-    }
-    
-    async function updateParticipants() {
-        if (!state.roomId) return;
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getParticipants', roomId: state.roomId, userId: state.userId })
-            });
-            if (response.ok) {
-                const data = await response.json();
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'createRoom', userId: state.userId, userName: state.userName })
+                });
+                const data = await res.json();
                 if (data.success) {
-                    const oldParticipants = state.participants.map(p => p.id).sort();
-                    const newParticipants = data.participants.map(p => p.id).sort();
-                    state.participants = data.participants || [];
-                    if (JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants)) {
+                    state.roomId = data.roomId;
+                    state.roomOwner = true;
+                    await startSession();
+                    showToast('Комната создана!');
+                    copyRoomCode();
+                } else throw new Error(data.error);
+            } catch {
+                showToast('Ошибка создания');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function joinRoom() {
+            const code = document.getElementById('roomCode').value.trim().toUpperCase();
+            if (!code || code.length !== 6) {
+                showToast('Введите 6-значный код');
+                return;
+            }
+            showLoading('Подключение...');
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'joinRoom', roomId: code, userId: state.userId, userName: state.userName })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    state.roomId = code;
+                    state.roomOwner = false;
+                    await startSession();
+                    showToast('Подключено!');
+                } else throw new Error(data.error);
+            } catch {
+                showToast('Ошибка подключения');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function startSession() {
+            document.getElementById('homeScreen').classList.remove('active');
+            document.getElementById('mainScreen').classList.add('active');
+            document.getElementById('currentRoomCode').textContent = state.roomId;
+            startUpdates();
+            await updateParticipants();
+        }
+
+        async function copyRoomCode() {
+            await navigator.clipboard.writeText(state.roomId);
+            showToast('Код скопирован');
+        }
+
+        async function shareRoomCode() {
+            if (navigator.share) {
+                await navigator.share({ title: 'DropShare', text: `Код комнаты: ${state.roomId}` });
+            } else {
+                copyRoomCode();
+            }
+        }
+
+        function startUpdates() {
+            if (state.updateInterval) clearInterval(state.updateInterval);
+            if (state.signalInterval) clearInterval(state.signalInterval);
+            state.updateInterval = setInterval(updateParticipants, 3000);
+            state.signalInterval = setInterval(pollSignals, 1000);
+            setTimeout(() => { updateParticipants(); pollSignals(); }, 500);
+        }
+
+        async function updateParticipants() {
+            if (!state.roomId) return;
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getParticipants', roomId: state.roomId, userId: state.userId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const old = state.participants.map(p => p.id);
+                    const newIds = data.participants.map(p => p.id);
+                    state.participants = data.participants;
+                    if (JSON.stringify(old) !== JSON.stringify(newIds)) {
                         renderParticipants();
-                        connectToNewParticipants(oldParticipants, newParticipants);
+                        connectToNewParticipants(old, newIds);
                     }
                 }
-            }
-        } catch (error) {
-            console.error('Update error:', error);
+            } catch (e) {}
         }
-    }
-    
-    function renderParticipants() {
-        const container = document.getElementById('participantsList');
-        if (!container) return;
-        container.innerHTML = '';
-        if (state.participants.length === 0) {
-            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-users" style="font-size: 48px;"></i><p>Ожидание участников...</p></div>';
-            return;
+
+        function connectToNewParticipants(oldList, newList) {
+            const newPeers = newList.filter(id => id !== state.userId && !oldList.includes(id) && !state.peerConnections[id]);
+            newPeers.forEach(peerId => createPeerConnection(peerId));
+            Object.keys(state.peerConnections).forEach(peerId => {
+                if (!newList.includes(peerId) && peerId !== state.userId) cleanupPeerConnection(peerId);
+            });
         }
-        state.participants.forEach(p => {
-            const isMe = p.id === state.userId;
-            const card = document.createElement('div');
-            card.className = `participant-card ${isMe ? 'me' : ''}`;
-            const avatar = document.createElement('div');
-            avatar.className = 'participant-avatar';
-            avatar.style.background = getColor(p.id);
-            avatar.textContent = getInitials(p.name || p.id);
-            const info = document.createElement('div');
-            info.className = 'participant-info';
-            const channelState = state.dataChannels[p.id]?.readyState;
-            const statusText = channelState === 'open' ? 'Соединение установлено' : (channelState === 'connecting' ? 'Подключение...' : 'Ожидание...');
-            info.innerHTML = `
-                <div class="participant-name">${escapeHtml(p.name || p.id)} ${isMe ? '(Вы)' : ''}</div>
-                <div class="participant-status"><i class="fas fa-wifi"></i> ${statusText} ${p.isOwner ? '<span class="participant-badge">Создатель</span>' : ''}</div>
-            `;
-            const actions = document.createElement('div');
-            actions.style.display = 'flex';
-            actions.style.gap = '8px';
-            if (!isMe) {
-                const sendBtn = document.createElement('button');
-                sendBtn.className = 'send-file-btn-card';
-                sendBtn.innerHTML = '<i class="fas fa-file-upload"></i> Отправить файл';
-                sendBtn.onclick = () => selectFileForUser(p.id, p.name);
-                if (channelState !== 'open') {
-                    sendBtn.style.opacity = '0.5';
-                    sendBtn.disabled = true;
-                    sendBtn.title = 'Подождите, соединение устанавливается...';
-                }
-                actions.appendChild(sendBtn);
-            }
-            if (state.roomOwner && !isMe) {
-                const kickBtn = document.createElement('button');
-                kickBtn.className = 'kick-btn';
-                kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
-                kickBtn.onclick = () => kickParticipant(p.id);
-                actions.appendChild(kickBtn);
-            }
-            card.appendChild(avatar);
-            card.appendChild(info);
-            if (actions.children.length) card.appendChild(actions);
-            container.appendChild(card);
-        });
-    }
-    
-    let selectedUserForFile = null;
-    function selectFileForUser(userId, userName) {
-        selectedUserForFile = { id: userId, name: userName };
-        document.getElementById('fileInput').click();
-    }
-    
-    async function handleFiles(files) {
-        if (!files || files.length === 0) return;
-        const file = files[0];
-        if (selectedUserForFile) {
-            await sendFileToUser(file, selectedUserForFile.id);
-            selectedUserForFile = null;
-        } else {
-            const peerIds = Object.keys(state.dataChannels).filter(pid => state.dataChannels[pid]?.readyState === 'open');
-            if (peerIds.length === 0) {
-                showToast('Нет активных подключений. Подождите, пока соединение установится...');
-                return;
-            }
-            for (const peerId of peerIds) {
-                await sendFileToUser(file, peerId);
-            }
-        }
-    }
-    
-    async function sendFileToUser(file, targetUserId) {
-        const dataChannel = state.dataChannels[targetUserId];
-        if (!dataChannel) {
-            showToast('Соединение не установлено');
-            return;
-        }
-        if (dataChannel.readyState !== 'open') {
-            showToast('Канал еще не открыт, файл будет отправлен автоматически');
-            if (!state.pendingFiles[targetUserId]) state.pendingFiles[targetUserId] = [];
-            state.pendingFiles[targetUserId].push(file);
-            return;
-        }
-        
-        const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        
-        showToast(`Отправка "${file.name}"...`);
-        
-        // Используем очередь с контролем потока
-        if (!state.sendingQueue[targetUserId]) {
-            state.sendingQueue[targetUserId] = [];
-        }
-        
-        state.sendingQueue[targetUserId].push({
-            fileId,
-            file,
-            targetUserId
-        });
-        
-        processSendQueue(targetUserId);
-    }
-    
-    async function processSendQueue(targetUserId) {
-        if (state.sendingInProgress[targetUserId]) return;
-        if (!state.sendingQueue[targetUserId] || state.sendingQueue[targetUserId].length === 0) return;
-        
-        state.sendingInProgress[targetUserId] = true;
-        const item = state.sendingQueue[targetUserId].shift();
-        const { fileId, file, targetUserId: target } = item;
-        
-        const dataChannel = state.dataChannels[target];
-        if (!dataChannel || dataChannel.readyState !== 'open') {
-            state.sendingInProgress[targetUserId] = false;
-            showToast('Соединение потеряно');
-            return;
-        }
-        
-        const totalChunks = Math.ceil(file.size / state.chunkSize);
-        let offset = 0;
-        let currentChunk = 0;
-        
-        const sendNextChunk = () => {
-            if (offset >= file.size) {
-                // Передача завершена
-                delete state.sendingInProgress[targetUserId];
-                showToast(`Файл "${file.name}" отправлен`);
-                saveTransfer({
-                    type: 'sent',
-                    from: state.userId,
-                    to: target,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    timestamp: Date.now()
-                });
-                processSendQueue(targetUserId);
-                return;
-            }
-            
-            const chunk = file.slice(offset, offset + state.chunkSize);
-            const reader = new FileReader();
-            
-            reader.onload = (e) => {
-                const chunkData = Array.from(new Uint8Array(e.target.result));
-                const message = JSON.stringify({
-                    type: 'file_chunk',
-                    fileId: fileId,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    fileType: file.type,
-                    chunkIndex: currentChunk,
-                    totalChunks: totalChunks,
-                    data: chunkData
-                });
-                
-                // Проверяем буфер отправки
-                if (dataChannel.bufferedAmount > dataChannel.bufferedAmountLowThreshold) {
-                    // Ждем, пока буфер очистится
-                    dataChannel.onbufferedamountlow = () => {
-                        dataChannel.onbufferedamountlow = null;
-                        dataChannel.send(message);
-                        offset += state.chunkSize;
-                        currentChunk++;
-                        const progress = (offset / file.size) * 100;
-                        if (Math.floor(progress) % 10 === 0) {
-                            console.log(`Progress: ${Math.floor(progress)}%`);
-                        }
-                        sendNextChunk();
-                    };
-                } else {
-                    dataChannel.send(message);
-                    offset += state.chunkSize;
-                    currentChunk++;
-                    const progress = (offset / file.size) * 100;
-                    if (Math.floor(progress) % 10 === 0) {
-                        console.log(`Progress: ${Math.floor(progress)}%`);
-                    }
-                    sendNextChunk();
-                }
-            };
-            
-            reader.onerror = () => {
-                console.error('Error reading chunk');
-                delete state.sendingInProgress[targetUserId];
-                showToast('Ошибка чтения файла');
-            };
-            
-            reader.readAsArrayBuffer(chunk);
-        };
-        
-        // Устанавливаем порог для буфера
-        dataChannel.bufferedAmountLowThreshold = 65536; // 64KB
-        sendNextChunk();
-    }
-    
-    function connectToNewParticipants(oldList, newList) {
-        const newParticipants = newList.filter(id => id !== state.userId && !oldList.includes(id) && !state.peerConnections[id]);
-        newParticipants.forEach(peerId => {
-            console.log('Connecting to:', peerId);
-            createPeerConnection(peerId);
-        });
-        Object.keys(state.peerConnections).forEach(peerId => {
-            if (!newList.includes(peerId) && peerId !== state.userId) {
-                cleanupPeerConnection(peerId);
-            }
-        });
-    }
-    
-    async function createPeerConnection(peerId) {
-        if (state.peerConnections[peerId]) return;
-        try {
+
+        async function createPeerConnection(peerId) {
+            if (state.peerConnections[peerId]) return;
             const pc = new RTCPeerConnection(config);
             state.peerConnections[peerId] = pc;
             
-            const dataChannel = pc.createDataChannel('fileTransfer');
-            setupDataChannel(dataChannel, peerId);
-            state.dataChannels[peerId] = dataChannel;
+            const dc = pc.createDataChannel('fileTransfer');
+            setupDataChannel(dc, peerId);
+            state.dataChannels[peerId] = dc;
             
             pc.onicecandidate = (e) => {
                 if (e.candidate) sendSignal(peerId, 'candidate', e.candidate);
@@ -1363,279 +1283,310 @@
                 state.dataChannels[peerId] = e.channel;
             };
             
-            pc.onconnectionstatechange = () => {
-                console.log(`Connection state: ${pc.connectionState}`);
-                renderParticipants();
-            };
-            
             if (state.userId < peerId) {
                 setTimeout(async () => {
-                    try {
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        await sendSignal(peerId, 'offer', offer);
-                    } catch (error) {
-                        console.error(`Offer error:`, error);
-                    }
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    await sendSignal(peerId, 'offer', offer);
                 }, 500);
             }
-        } catch (error) {
-            console.error(`Connection error:`, error);
         }
-    }
-    
-    function setupDataChannel(channel, peerId) {
-        channel.onopen = () => {
-            console.log(`Data channel open with ${peerId}`);
-            renderParticipants();
-            if (state.pendingFiles[peerId] && state.pendingFiles[peerId].length) {
-                const pending = [...state.pendingFiles[peerId]];
-                state.pendingFiles[peerId] = [];
-                pending.forEach(file => sendFileToUser(file, peerId));
-            }
-        };
-        
-        channel.onclose = () => {
-            console.log(`Data channel closed with ${peerId}`);
-            renderParticipants();
-        };
-        
-        channel.onmessage = async (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'file_chunk') {
-                    await handleFileChunk(data, peerId);
+
+        function setupDataChannel(channel, peerId) {
+            channel.onopen = () => {
+                renderParticipants();
+                if (state.pendingFiles[peerId]?.length) {
+                    state.pendingFiles[peerId].forEach(f => sendFileToUser(f, peerId));
+                    delete state.pendingFiles[peerId];
                 }
-            } catch (err) {
-                console.error('Parse error:', err);
-            }
-        };
-    }
-    
-    async function handleFileChunk(data, fromPeerId) {
-        const transferId = data.fileId;
-        if (!state.activeTransfers[transferId]) {
-            state.activeTransfers[transferId] = {
-                id: transferId,
-                fileName: data.fileName,
-                fileSize: data.fileSize,
-                fileType: data.fileType,
-                receivedChunks: 0,
-                totalChunks: data.totalChunks,
-                chunks: new Array(data.totalChunks),
-                fromPeerId: fromPeerId
             };
-            showToast(`Получение "${data.fileName}"...`);
+            channel.onmessage = async (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'file_chunk') await handleFileChunk(data, peerId);
+            };
         }
-        
-        const transfer = state.activeTransfers[transferId];
-        transfer.chunks[data.chunkIndex] = new Uint8Array(data.data);
-        transfer.receivedChunks++;
-        
-        if (transfer.receivedChunks === transfer.totalChunks) {
-            let totalSize = 0;
-            for (const chunk of transfer.chunks) totalSize += chunk.length;
-            const fullData = new Uint8Array(totalSize);
+
+        let selectedUser = null;
+
+        function selectFileForUser(userId, userName) {
+            selectedUser = { id: userId, name: userName };
+            document.getElementById('fileInput').click();
+        }
+
+        async function handleFiles(files) {
+            if (!files?.length) return;
+            const file = files[0];
+            if (selectedUser) {
+                await sendFileToUser(file, selectedUser.id);
+                selectedUser = null;
+            } else {
+                const peers = Object.keys(state.dataChannels).filter(id => state.dataChannels[id]?.readyState === 'open');
+                if (!peers.length) {
+                    showToast('Нет активных подключений');
+                    return;
+                }
+                peers.forEach(pid => sendFileToUser(file, pid));
+            }
+        }
+
+        async function sendFileToUser(file, targetId) {
+            const dc = state.dataChannels[targetId];
+            if (!dc || dc.readyState !== 'open') {
+                if (!state.pendingFiles[targetId]) state.pendingFiles[targetId] = [];
+                state.pendingFiles[targetId].push(file);
+                showToast('Ожидание соединения...');
+                return;
+            }
+            
+            const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            showToast(`Отправка: ${file.name}`);
+            
+            if (!state.sendingQueue[targetId]) state.sendingQueue[targetId] = [];
+            state.sendingQueue[targetId].push({ fileId, file, targetId });
+            processSendQueue(targetId);
+        }
+
+        async function processSendQueue(targetId) {
+            if (state.sendingInProgress[targetId]) return;
+            if (!state.sendingQueue[targetId]?.length) return;
+            
+            state.sendingInProgress[targetId] = true;
+            const { fileId, file } = state.sendingQueue[targetId].shift();
+            const dc = state.dataChannels[targetId];
+            
+            const totalChunks = Math.ceil(file.size / state.chunkSize);
             let offset = 0;
-            for (const chunk of transfer.chunks) {
-                fullData.set(chunk, offset);
-                offset += chunk.length;
-            }
+            let chunkIndex = 0;
             
-            const fileData = {
-                id: transferId,
-                name: transfer.fileName,
-                size: transfer.fileSize,
-                type: transfer.fileType,
-                data: Array.from(fullData),
-                savedAt: Date.now()
+            const sendNext = () => {
+                if (offset >= file.size) {
+                    delete state.sendingInProgress[targetId];
+                    showToast(`Готово: ${file.name}`);
+                    saveTransfer({ type: 'sent', from: state.userId, fileName: file.name, fileSize: file.size, timestamp: Date.now() });
+                    processSendQueue(targetId);
+                    return;
+                }
+                
+                const chunk = file.slice(offset, offset + state.chunkSize);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const chunkData = Array.from(new Uint8Array(e.target.result));
+                    const msg = JSON.stringify({
+                        type: 'file_chunk',
+                        fileId, fileName: file.name, fileSize: file.size, fileType: file.type,
+                        chunkIndex, totalChunks, data: chunkData
+                    });
+                    
+                    if (dc.bufferedAmount > 65536) {
+                        dc.onbufferedamountlow = () => {
+                            dc.onbufferedamountlow = null;
+                            dc.send(msg);
+                            offset += state.chunkSize;
+                            chunkIndex++;
+                            sendNext();
+                        };
+                    } else {
+                        dc.send(msg);
+                        offset += state.chunkSize;
+                        chunkIndex++;
+                        sendNext();
+                    }
+                };
+                reader.readAsArrayBuffer(chunk);
             };
             
-            await saveFile(fileData);
-            const sender = state.participants.find(p => p.id === fromPeerId);
-            await saveTransfer({
-                type: 'received',
-                from: fromPeerId,
-                senderName: sender?.name || fromPeerId,
-                fileName: transfer.fileName,
-                fileSize: transfer.fileSize,
-                timestamp: Date.now()
-            });
-            
-            delete state.activeTransfers[transferId];
-            showToast(`Файл "${transfer.fileName}" получен`);
+            dc.bufferedAmountLowThreshold = 65536;
+            sendNext();
         }
-    }
-    
-    function cleanupPeerConnection(peerId) {
-        if (state.peerConnections[peerId]) {
-            state.peerConnections[peerId].close();
-            delete state.peerConnections[peerId];
-        }
-        if (state.dataChannels[peerId]) delete state.dataChannels[peerId];
-        if (state.pendingFiles[peerId]) delete state.pendingFiles[peerId];
-        if (state.sendingQueue[peerId]) delete state.sendingQueue[peerId];
-        delete state.sendingInProgress[peerId];
-    }
-    
-    async function pollSignals() {
-        if (!state.roomId) return;
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getSignals', roomId: state.roomId, userId: state.userId, timestamp: state.lastPollTime })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.signals?.length > 0) {
-                    state.lastPollTime = Date.now();
-                    for (const signal of data.signals) await handleSignal(signal);
-                }
+
+        async function handleFileChunk(data, fromId) {
+            const id = data.fileId;
+            if (!state.activeTransfers[id]) {
+                state.activeTransfers[id] = {
+                    fileName: data.fileName, fileSize: data.fileSize, fileType: data.fileType,
+                    chunks: new Array(data.totalChunks), received: 0, total: data.totalChunks
+                };
             }
-        } catch (error) {
-            console.error('Poll error:', error);
+            
+            const t = state.activeTransfers[id];
+            t.chunks[data.chunkIndex] = new Uint8Array(data.data);
+            t.received++;
+            
+            if (t.received === t.total) {
+                let size = 0;
+                for (const c of t.chunks) size += c.length;
+                const full = new Uint8Array(size);
+                let offset = 0;
+                for (const c of t.chunks) { full.set(c, offset); offset += c.length; }
+                
+                await saveFile({
+                    id, name: t.fileName, size: t.fileSize, type: t.fileType,
+                    data: Array.from(full), savedAt: Date.now()
+                });
+                
+                const sender = state.participants.find(p => p.id === fromId);
+                await saveTransfer({
+                    type: 'received', from: fromId, senderName: sender?.name,
+                    fileName: t.fileName, fileSize: t.fileSize, timestamp: Date.now()
+                });
+                
+                delete state.activeTransfers[id];
+                showToast(`Получен: ${t.fileName}`);
+            }
         }
-    }
-    
-    async function handleSignal(signal) {
-        const signalId = `${signal.from}_${signal.type}_${Date.now()}`;
-        if (state.processedSignals.has(signalId)) return;
-        state.processedSignals.add(signalId);
-        if (signal.from === state.userId) return;
-        try {
+
+        async function pollSignals() {
+            if (!state.roomId) return;
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getSignals', roomId: state.roomId, userId: state.userId, timestamp: state.lastPollTime })
+                });
+                const data = await res.json();
+                if (data.success && data.signals?.length) {
+                    state.lastPollTime = Date.now();
+                    for (const s of data.signals) await handleSignal(s);
+                }
+            } catch (e) {}
+        }
+
+        async function handleSignal(signal) {
+            const id = `${signal.from}_${signal.type}_${Date.now()}`;
+            if (state.processedSignals.has(id) || signal.from === state.userId) return;
+            state.processedSignals.add(id);
+            
             switch (signal.type) {
                 case 'offer': await handleOffer(signal.from, signal.data); break;
                 case 'answer': await handleAnswer(signal.from, signal.data); break;
                 case 'candidate': await handleCandidate(signal.from, signal.data); break;
                 case 'kicked':
                     if (signal.to === state.userId) {
-                        showToast('Вас удалили из комнаты');
+                        showToast('Вас удалили');
                         leaveRoom();
                     }
                     break;
             }
-        } catch (error) {
-            console.error(`Signal error:`, error);
         }
-    }
-    
-    async function sendSignal(to, type, data) {
-        if (!state.roomId) return;
-        await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'signal', roomId: state.roomId, userId: state.userId, signal: { to, type, data } })
-        });
-    }
-    
-    async function handleOffer(peerId, offer) {
-        let pc = state.peerConnections[peerId];
-        if (!pc) {
-            pc = new RTCPeerConnection(config);
-            state.peerConnections[peerId] = pc;
-            pc.onicecandidate = (e) => { if (e.candidate) sendSignal(peerId, 'candidate', e.candidate); };
-            pc.ondatachannel = (e) => {
-                setupDataChannel(e.channel, peerId);
-                state.dataChannels[peerId] = e.channel;
-            };
-        }
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sendSignal(peerId, 'answer', answer);
-        if (state.pendingCandidates[peerId]) {
-            for (const candidate of state.pendingCandidates[peerId]) {
-                try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-            }
-            delete state.pendingCandidates[peerId];
-        }
-    }
-    
-    async function handleAnswer(peerId, answer) {
-        const pc = state.peerConnections[peerId];
-        if (!pc) return;
-        if (pc.signalingState === 'have-local-offer') {
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-    }
-    
-    async function handleCandidate(peerId, candidate) {
-        const pc = state.peerConnections[peerId];
-        if (!pc || pc.remoteDescription === null) {
-            if (!state.pendingCandidates[peerId]) state.pendingCandidates[peerId] = [];
-            state.pendingCandidates[peerId].push(candidate);
-            return;
-        }
-        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (error) {}
-    }
-    
-    async function kickParticipant(participantId) {
-        if (!confirm('Удалить участника?')) return;
-        await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'kickParticipant', roomId: state.roomId, userId: state.userId, participantId })
-        });
-        showToast('Участник удален');
-        cleanupPeerConnection(participantId);
-    }
-    
-    async function leaveRoom() {
-        if (!confirm('Выйти из комнаты?')) return;
-        if (state.roomId) {
+
+        async function sendSignal(to, type, data) {
+            if (!state.roomId) return;
             await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'leaveRoom', roomId: state.roomId, userId: state.userId })
+                body: JSON.stringify({ action: 'signal', roomId: state.roomId, userId: state.userId, signal: { to, type, data } })
             });
         }
-        cleanup();
-        showScreen('homeScreen');
-        document.getElementById('roomCode').value = '';
-        showToast('Вы вышли из комнаты');
-    }
-    
-    function cleanup() {
-        if (state.updateInterval) clearInterval(state.updateInterval);
-        if (state.signalInterval) clearInterval(state.signalInterval);
-        Object.values(state.peerConnections).forEach(pc => pc.close());
-        state.peerConnections = {};
-        state.dataChannels = {};
-        state.activeTransfers = {};
-        state.pendingFiles = {};
-        state.sendingQueue = {};
-        state.sendingInProgress = {};
-        state.roomId = null;
-        state.roomOwner = false;
-        state.pendingCandidates = {};
-        state.processedSignals.clear();
-    }
-    
-    function getInitials(name) {
-        const words = name.split(' ');
-        return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.substring(0, 2);
-    }
-    
-    function getColor(id) {
-        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'];
-        let hash = 0;
-        for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-        return colors[Math.abs(hash) % colors.length];
-    }
-    
-    function showLoading(text = 'Загрузка...') {
-        document.getElementById('loading').style.display = 'flex';
-        document.getElementById('loadingText').textContent = text;
-    }
-    
-    function hideLoading() {
-        document.getElementById('loading').style.display = 'none';
-    }
-    
-    document.getElementById('roomCode')?.addEventListener('input', function() {
-        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
-    });
-</script>
+
+        async function handleOffer(peerId, offer) {
+            let pc = state.peerConnections[peerId];
+            if (!pc) {
+                pc = new RTCPeerConnection(config);
+                state.peerConnections[peerId] = pc;
+                pc.onicecandidate = (e) => { if (e.candidate) sendSignal(peerId, 'candidate', e.candidate); };
+                pc.ondatachannel = (e) => {
+                    setupDataChannel(e.channel, peerId);
+                    state.dataChannels[peerId] = e.channel;
+                };
+            }
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await sendSignal(peerId, 'answer', answer);
+            if (state.pendingCandidates[peerId]) {
+                for (const c of state.pendingCandidates[peerId]) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+                }
+                delete state.pendingCandidates[peerId];
+            }
+        }
+
+        async function handleAnswer(peerId, answer) {
+            const pc = state.peerConnections[peerId];
+            if (pc && pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            }
+        }
+
+        async function handleCandidate(peerId, candidate) {
+            const pc = state.peerConnections[peerId];
+            if (!pc || !pc.remoteDescription) {
+                if (!state.pendingCandidates[peerId]) state.pendingCandidates[peerId] = [];
+                state.pendingCandidates[peerId].push(candidate);
+                return;
+            }
+            try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch {}
+        }
+
+        async function kickParticipant(id) {
+            if (!confirm('Удалить участника?')) return;
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'kickParticipant', roomId: state.roomId, userId: state.userId, participantId: id })
+            });
+            showToast('Участник удален');
+            cleanupPeerConnection(id);
+        }
+
+        function cleanupPeerConnection(peerId) {
+            if (state.peerConnections[peerId]) {
+                state.peerConnections[peerId].close();
+                delete state.peerConnections[peerId];
+            }
+            delete state.dataChannels[peerId];
+            delete state.pendingFiles[peerId];
+            delete state.sendingQueue[peerId];
+            delete state.sendingInProgress[peerId];
+        }
+
+        async function leaveRoom() {
+            if (!confirm('Выйти из комнаты?')) return;
+            if (state.roomId) {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'leaveRoom', roomId: state.roomId, userId: state.userId })
+                });
+            }
+            cleanup();
+            document.getElementById('mainScreen').classList.remove('active');
+            document.getElementById('homeScreen').classList.add('active');
+            document.getElementById('roomCode').value = '';
+            showToast('Вы вышли');
+        }
+
+        function cleanup() {
+            if (state.updateInterval) clearInterval(state.updateInterval);
+            if (state.signalInterval) clearInterval(state.signalInterval);
+            Object.values(state.peerConnections).forEach(pc => pc.close());
+            state.peerConnections = {};
+            state.dataChannels = {};
+            state.activeTransfers = {};
+            state.pendingFiles = {};
+            state.sendingQueue = {};
+            state.sendingInProgress = {};
+            state.pendingCandidates = {};
+            state.processedSignals.clear();
+            state.roomId = null;
+            state.roomOwner = false;
+        }
+
+        function getInitials(name) {
+            const parts = name.split(' ');
+            return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
+        }
+
+        function getColor(id) {
+            const colors = ['#667eea', '#764ba2', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#ec489a'];
+            let hash = 0;
+            for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        document.getElementById('roomCode')?.addEventListener('input', function() {
+            this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
+        });
+    </script>
 </body>
 </html>
