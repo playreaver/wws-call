@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>P2P File Transfer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .app {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+
+        .screen {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            background: #000;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* Home Screen */
+        .home-screen {
+            padding: 40px 20px;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+        }
+
+        .logo {
+            text-align: center;
+        }
+
+        .logo h1 {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 16px;
+        }
+
+        .call-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .create-btn {
+            width: 100%;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.2s;
+        }
+
+        .create-btn:active {
+            transform: scale(0.98);
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .join-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .join-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 15px 20px;
+            color: white;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+        }
+
+        .join-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .join-btn {
+            width: 100%;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .join-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Main Screen */
+        .main-screen {
+            background: #000;
+            position: relative;
+        }
+
+        .header {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .room-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .room-code-display {
+            font-size: 24px;
+            font-weight: 600;
+            font-family: 'Monaco', 'Courier New', monospace;
+            letter-spacing: 3px;
+        }
+
+        .room-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+
+        .action-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-btn.share {
+            background: #667eea;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: rgba(0, 0, 0, 0.9);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .tab-content {
+            flex: 1;
+            display: none;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Participants */
+        .participants-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .participant-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .participant-card.me {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .participant-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .participant-info {
+            flex: 1;
+        }
+
+        .participant-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 3px;
+        }
+
+        .participant-status {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .participant-badge {
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .kick-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .kick-btn:active {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        /* File Transfer Section */
+        .file-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .send-file-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .drag-area {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+
+        .drag-area.drag-over {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: #667eea;
+        }
+
+        .drag-area i {
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 10px;
+        }
+
+        .drag-area p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+
+        /* Files List */
+        .files-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .file-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(102, 126, 234, 0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #667eea;
+        }
+
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .file-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-meta {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            display: flex;
+            gap: 10px;
+        }
+
+        .file-progress {
+            margin-top: 8px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .file-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .file-actions-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            padding: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+
+        .file-btn.download {
+            background: rgba(102, 126, 234, 0.3);
+        }
+
+        .file-btn.delete {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .file-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Transfer History */
+        .transfer-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .transfer-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .transfer-sender {
+            color: #667eea;
+        }
+
+        .transfer-name {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        /* Bottom Bar */
+        .bottom-bar {
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+        }
+
+        .leave-btn {
+            background: #ef4444;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* Loading */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 100;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .connection-dot.connected {
+            background: #10b981;
+        }
+
+        .connection-dot.disconnected {
+            background: #ef4444;
+        }
+
+        /* Scrollbar */
+        .tab-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .tab-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .tab-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        @media (max-width: 768px) {
+            .logo h1 { font-size: 36px; }
+            .room-code-display { font-size: 20px; }
+            .file-name { font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText">Подключение...</div>
+    </div>
+
+    <div class="connection-status" id="connectionStatus" style="display: none;">
+        <div class="connection-dot disconnected"></div>
+        <span>Отключен</span>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="app" id="app">
+        <!-- Home Screen -->
+        <div class="screen home-screen active" id="homeScreen">
+            <div class="logo">
+                <h1><i class="fas fa-file-transfer"></i> FileShare</h1>
+                <p>P2P передача файлов напрямую</p>
+            </div>
+
+            <div class="call-actions">
+                <button class="create-btn" onclick="createRoom()">
+                    <i class="fas fa-plus-circle"></i>
+                    Создать комнату
+                </button>
+
+                <div class="divider">или</div>
+
+                <div class="join-section">
+                    <input type="text" class="join-input" id="roomCode" 
+                           placeholder="Введите код комнаты" maxlength="6" 
+                           onkeypress="if(event.key=='Enter') joinRoom()">
+                    <button class="join-btn" onclick="joinRoom()">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Присоединиться
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; color: rgba(255, 255, 255, 0.4); font-size: 12px; text-align: center;">
+                <p><i class="fas fa-shield-alt"></i> P2P шифрование • Файлы передаются напрямую • Без сервера</p>
+            </div>
+        </div>
+
+        <!-- Main Screen -->
+        <div class="screen main-screen" id="mainScreen">
+            <div class="header">
+                <div class="room-info">
+                    <div style="font-size: 12px; color: rgba(255, 255, 255, 0.6);">
+                        <i class="fas fa-hashtag"></i> Код комнаты
+                    </div>
+                    <div class="room-code-display" id="currentRoomCode">------</div>
+                </div>
+                
+                <div class="room-actions">
+                    <button class="action-btn share" onclick="shareRoomCode()">
+                        <i class="fas fa-share-alt"></i>
+                    </button>
+                    <button class="action-btn" onclick="copyRoomCode()">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('participants')">
+                    <i class="fas fa-users"></i> Участники
+                </button>
+                <button class="tab" onclick="switchTab('files')">
+                    <i class="fas fa-folder"></i> Файлы
+                </button>
+                <button class="tab" onclick="switchTab('history')">
+                    <i class="fas fa-history"></i> История
+                </button>
+            </div>
+
+            <div class="tab-content active" id="participantsTab">
+                <div class="participants-list" id="participantsList">
+                    <!-- Participants will be added here -->
+                </div>
+            </div>
+
+            <div class="tab-content" id="filesTab">
+                <div class="file-actions">
+                    <button class="send-file-btn" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-cloud-upload-alt"></i> Выбрать файл
+                    </button>
+                </div>
+                <input type="file" id="fileInput" style="display: none" multiple onchange="handleFiles(this.files)">
+                
+                <div class="drag-area" id="dragArea" onclick="document.getElementById('fileInput').click()">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Перетащите файлы сюда или нажмите для выбора</p>
+                </div>
+
+                <div class="files-list" id="filesList">
+                    <!-- Files will be added here -->
+                </div>
+            </div>
+
+            <div class="tab-content" id="historyTab">
+                <div id="historyList">
+                    <!-- Transfer history will be added here -->
+                </div>
+            </div>
+
+            <div class="bottom-bar">
+                <button class="leave-btn" onclick="leaveRoom()">
+                    <i class="fas fa-sign-out-alt"></i> Выйти из комнаты
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="audioContainer"></div>
+
+<script>
+    // Configuration
+    const API_URL = "https://functions.yandexcloud.net/d4etraj6pl3ep8uj8cd8";
+    
+    const config = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { 
+                urls: 'turn:openrelay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            },
+            { 
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
+        ],
+        iceCandidatePoolSize: 10
+    };
+    
+    // State
+    const state = {
+        userId: null,
+        userName: null,
+        roomId: null,
+        roomOwner: false,
+        peerConnections: {},
+        dataChannels: {},
+        signalInterval: null,
+        updateInterval: null,
+        participants: [],
+        pendingCandidates: {},
+        processedSignals: new Set(),
+        lastPollTime: 0,
+        files: [],
+        transfers: [],
+        activeTransfers: {},
+        chunkSize: 16384 // 16KB chunks for better performance
+    };
+    
+    // Initialize IndexedDB
+    const fileStore = localforage.createInstance({
+        name: "P2PFileTransfer",
+        storeName: "files"
+    });
+    
+    const historyStore = localforage.createInstance({
+        name: "P2PFileTransfer",
+        storeName: "history"
+    });
+    
+    document.addEventListener('DOMContentLoaded', init);
+    
+    async function init() {
+        console.log('=== P2P File Transfer Initialization ===');
+        
+        state.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        state.userName = generateName();
+        
+        console.log('User ID:', state.userId);
+        console.log('User Name:', state.userName);
+        
+        await loadFiles();
+        await loadHistory();
+        
+        if (!checkSupport()) {
+            showToast('Ваш браузер не поддерживает P2P передачу файлов', 5000);
+            document.getElementById('loadingText').textContent = 'Браузер не поддерживается';
+            return;
+        }
+        
+        await checkConnection();
+        
+        setupDragAndDrop();
+        
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+        }, 1000);
+    }
+    
+    function generateName() {
+        const names = ['Алексей', 'Максим', 'Дмитрий', 'Иван', 'Сергей', 'Андрей', 'Михаил', 'Павел', 'Анна', 'Мария', 'Екатерина', 'Ольга'];
+        const surnames = ['Петров', 'Иванов', 'Сидоров', 'Кузнецов', 'Смирнов', 'Попов', 'Лебедев', 'Козлов', 'Волков', 'Морозов'];
+        return `${names[Math.floor(Math.random() * names.length)]} ${surnames[Math.floor(Math.random() * surnames.length)]}`;
+    }
+    
+    function checkSupport() {
+        return !!(window.RTCPeerConnection && navigator.mediaDevices);
+    }
+    
+    async function checkConnection() {
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'ping' })
+            });
+            updateConnectionStatus(response.ok);
+            return response.ok;
+        } catch (error) {
+            updateConnectionStatus(false);
+            return false;
+        }
+    }
+    
+    function updateConnectionStatus(connected) {
+        const status = document.getElementById('connectionStatus');
+        if (!status) return;
+        
+        const dot = status.querySelector('.connection-dot');
+        const text = status.querySelector('span');
+        
+        status.style.display = 'flex';
+        dot.className = connected ? 'connection-dot connected' : 'connection-dot disconnected';
+        text.textContent = connected ? 'Подключено' : 'Отключено';
+    }
+    
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+    
+    function showToast(message, duration = 3000) {
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+    
+    function setupDragAndDrop() {
+        const dragArea = document.getElementById('dragArea');
+        
+        dragArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragArea.classList.add('drag-over');
+        });
+        
+        dragArea.addEventListener('dragleave', () => {
+            dragArea.classList.remove('drag-over');
+        });
+        
+        dragArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragArea.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+    }
+    
+    async function loadFiles() {
+        try {
+            const files = await fileStore.keys();
+            state.files = [];
+            for (const key of files) {
+                const fileData = await fileStore.getItem(key);
+                if (fileData) {
+                    state.files.push(fileData);
+                }
+            }
+            renderFiles();
+        } catch (error) {
+            console.error('Error loading files:', error);
+        }
+    }
+    
+    async function loadHistory() {
+        try {
+            const history = await historyStore.getItem('transfers');
+            if (history) {
+                state.transfers = history;
+                renderHistory();
+            }
+        } catch (error) {
+            console.error('Error loading history:', error);
+        }
+    }
+    
+    async function saveFile(fileData) {
+        try {
+            await fileStore.setItem(fileData.id, fileData);
+            state.files.push(fileData);
+            renderFiles();
+            return true;
+        } catch (error) {
+            console.error('Error saving file:', error);
+            return false;
+        }
+    }
+    
+    async function saveTransfer(transfer) {
+        try {
+            state.transfers.unshift(transfer);
+            if (state.transfers.length > 100) {
+                state.transfers = state.transfers.slice(0, 100);
+            }
+            await historyStore.setItem('transfers', state.transfers);
+            renderHistory();
+        } catch (error) {
+            console.error('Error saving transfer:', error);
+        }
+    }
+    
+    function renderFiles() {
+        const container = document.getElementById('filesList');
+        if (!container) return;
+        
+        if (state.files.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-folder-open" style="font-size: 48px;"></i><p>Нет сохраненных файлов</p></div>';
+            return;
+        }
+        
+        container.innerHTML = state.files.map(file => `
+            <div class="file-card">
+                <div class="file-icon">
+                    <i class="fas ${getFileIcon(file.type)}"></i>
+                </div>
+                <div class="file-info">
+                    <div class="file-name">${escapeHtml(file.name)}</div>
+                    <div class="file-meta">
+                        <span>${formatFileSize(file.size)}</span>
+                        <span>${new Date(file.savedAt).toLocaleString()}</span>
+                    </div>
+                </div>
+                <div class="file-actions-btns">
+                    <button class="file-btn download" onclick="downloadFile('${file.id}')">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="file-btn delete" onclick="deleteFile('${file.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function renderHistory() {
+        const container = document.getElementById('historyList');
+        if (!container) return;
+        
+        if (state.transfers.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-history" style="font-size: 48px;"></i><p>История передач пуста</p></div>';
+            return;
+        }
+        
+        container.innerHTML = state.transfers.map(transfer => `
+            <div class="transfer-item">
+                <div class="transfer-header">
+                    <span class="transfer-sender">
+                        <i class="fas ${transfer.type === 'sent' ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
+                        ${transfer.type === 'sent' ? 'Отправлено' : 'Получено'} ${transfer.from === state.userId ? 'вами' : 'от ' + (transfer.senderName || transfer.from)}
+                    </span>
+                    <span>${new Date(transfer.timestamp).toLocaleString()}</span>
+                </div>
+                <div class="transfer-name">${escapeHtml(transfer.fileName)}</div>
+                <div class="file-meta">${formatFileSize(transfer.fileSize)}</div>
+            </div>
+        `).join('');
+    }
+    
+    function getFileIcon(mimeType) {
+        if (mimeType?.startsWith('image/')) return 'fa-image';
+        if (mimeType?.startsWith('video/')) return 'fa-video';
+        if (mimeType?.startsWith('audio/')) return 'fa-music';
+        if (mimeType?.includes('pdf')) return 'fa-file-pdf';
+        if (mimeType?.includes('word')) return 'fa-file-word';
+        if (mimeType?.includes('excel')) return 'fa-file-excel';
+        return 'fa-file';
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    async function downloadFile(fileId) {
+        const file = state.files.find(f => f.id === fileId);
+        if (!file) return;
+        
+        try {
+            const blob = new Blob([new Uint8Array(file.data)], { type: file.type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Файл сохранен');
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            showToast('Ошибка при скачивании файла');
+        }
+    }
+    
+    async function deleteFile(fileId) {
+        if (!confirm('Удалить файл?')) return;
+        
+        try {
+            await fileStore.removeItem(fileId);
+            state.files = state.files.filter(f => f.id !== fileId);
+            renderFiles();
+            showToast('Файл удален');
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            showToast('Ошибка удаления');
+        }
+    }
+    
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        if (tabName === 'participants') {
+            document.querySelector('.tabs button:first-child').classList.add('active');
+            document.getElementById('participantsTab').classList.add('active');
+        } else if (tabName === 'files') {
+            document.querySelector('.tabs button:nth-child(2)').classList.add('active');
+            document.getElementById('filesTab').classList.add('active');
+        } else if (tabName === 'history') {
+            document.querySelector('.tabs button:nth-child(3)').classList.add('active');
+            document.getElementById('historyTab').classList.add('active');
+        }
+    }
+    
+    async function createRoom() {
+        showLoading('Создание комнаты...');
+        
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'createRoom', 
+                    userId: state.userId,
+                    userName: state.userName 
+                })
+            });
+    
+            const data = await response.json();
+            
+            if (data.success) {
+                state.roomId = data.roomId;
+                state.roomOwner = true;
+                await startSession();
+                showToast('Комната создана! Код скопирован');
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (error) {
+            showToast('Ошибка создания комнаты');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    async function joinRoom() {
+        const code = document.getElementById('roomCode').value.trim().toUpperCase();
+        
+        if (!code || code.length !== 6) {
+            showToast('Введите 6-значный код');
+            return;
+        }
+    
+        showLoading('Присоединение...');
+        
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'joinRoom', 
+                    roomId: code,
+                    userId: state.userId,
+                    userName: state.userName 
+                })
+            });
+    
+            const data = await response.json();
+            
+            if (data.success) {
+                state.roomId = code;
+                state.roomOwner = false;
+                await startSession();
+                showToast('Присоединились к комнате');
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (error) {
+            showToast('Ошибка присоединения');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    async function startSession() {
+        try {
+            showScreen('mainScreen');
+            document.getElementById('currentRoomCode').textContent = state.roomId;
+            
+            updateShareButton();
+            
+            if (state.roomOwner) {
+                setTimeout(() => copyRoomCode(), 500);
+            }
+            
+            startUpdates();
+            await updateParticipants();
+            
+        } catch (error) {
+            showToast('Ошибка начала сессии');
+            showScreen('homeScreen');
+        }
+    }
+    
+    function updateShareButton() {
+        const shareBtn = document.querySelector('.action-btn.share');
+        if (shareBtn) {
+            shareBtn.style.display = navigator.share ? 'flex' : 'none';
+        }
+    }
+    
+    async function copyRoomCode() {
+        if (!state.roomId) return;
+        
+        try {
+            await navigator.clipboard.writeText(state.roomId);
+            showToast('Код скопирован');
+        } catch (error) {
+            const input = document.createElement('input');
+            input.value = state.roomId;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showToast('Код скопирован');
+        }
+    }
+    
+    async function shareRoomCode() {
+        if (!state.roomId) return;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Присоединиться к P2P передаче файлов',
+                    text: `Код комнаты: ${state.roomId}`,
+                    url: window.location.href
+                });
+            } catch (error) {
+                if (error.name !== 'AbortError') copyRoomCode();
+            }
+        } else {
+            copyRoomCode();
+        }
+    }
+    
+    function startUpdates() {
+        if (state.updateInterval) clearInterval(state.updateInterval);
+        if (state.signalInterval) clearInterval(state.signalInterval);
+        
+        state.updateInterval = setInterval(updateParticipants, 3000);
+        state.signalInterval = setInterval(pollSignals, 1000);
+        
+        setTimeout(() => {
+            updateParticipants();
+            pollSignals();
+        }, 500);
+    }
+    
+    async function updateParticipants() {
+        if (!state.roomId) return;
+        
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'getParticipants', 
+                    roomId: state.roomId,
+                    userId: state.userId 
+                })
+            });
+    
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    const oldParticipants = state.participants.map(p => p.id).sort();
+                    const newParticipants = data.participants.map(p => p.id).sort();
+                    
+                    state.participants = data.participants || [];
+                    
+                    if (JSON.stringify(oldParticipants) !== JSON.stringify(newParticipants)) {
+                        console.log('Participants:', state.participants.length);
+                        renderParticipants();
+                        connectToNewParticipants(oldParticipants, newParticipants);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Update error:', error);
+        }
+    }
+    
+    function renderParticipants() {
+        const container = document.getElementById('participantsList');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (state.participants.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.4);"><i class="fas fa-users" style="font-size: 48px;"></i><p>Ожидание участников...</p></div>';
+            return;
+        }
+        
+        state.participants.forEach(p => {
+            const isMe = p.id === state.userId;
+            const card = document.createElement('div');
+            card.className = `participant-card ${isMe ? 'me' : ''}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'participant-avatar';
+            avatar.style.background = getColor(p.id);
+            avatar.textContent = getInitials(p.name || p.id);
+            
+            const info = document.createElement('div');
+            info.className = 'participant-info';
+            info.innerHTML = `
+                <div class="participant-name">
+                    ${escapeHtml(p.name || p.id)} ${isMe ? '(Вы)' : ''}
+                </div>
+                <div class="participant-status">
+                    <i class="fas fa-wifi"></i> В сети
+                    ${p.isOwner ? '<span class="participant-badge">Создатель</span>' : ''}
+                </div>
+            `;
+            
+            const actions = document.createElement('div');
+            if (state.roomOwner && !isMe) {
+                const sendFileBtn = document.createElement('button');
+                sendFileBtn.className = 'kick-btn';
+                sendFileBtn.innerHTML = '<i class="fas fa-file-upload"></i>';
+                sendFileBtn.style.background = 'rgba(102, 126, 234, 0.2)';
+                sendFileBtn.style.color = '#667eea';
+                sendFileBtn.onclick = () => selectFileForUser(p.id, p.name);
+                
+                const kickBtn = document.createElement('button');
+                kickBtn.className = 'kick-btn';
+                kickBtn.innerHTML = '<i class="fas fa-user-slash"></i>';
+                kickBtn.onclick = () => kickParticipant(p.id);
+                
+                actions.appendChild(sendFileBtn);
+                actions.appendChild(kickBtn);
+                actions.style.display = 'flex';
+                actions.style.gap = '8px';
+            }
+            
+            card.appendChild(avatar);
+            card.appendChild(info);
+            if (actions.children.length) card.appendChild(actions);
+            
+            container.appendChild(card);
+        });
+    }
+    
+    let selectedUserForFile = null;
+    
+    function selectFileForUser(userId, userName) {
+        selectedUserForFile = { id: userId, name: userName };
+        document.getElementById('fileInput').click();
+    }
+    
+    async function handleFiles(files) {
+        if (!files || files.length === 0) return;
+        
+        const file = files[0];
+        
+        if (selectedUserForFile) {
+            await sendFileToUser(file, selectedUserForFile.id);
+            selectedUserForFile = null;
+        } else {
+            const peerIds = Object.keys(state.peerConnections);
+            if (peerIds.length === 0) {
+                showToast('Нет подключенных участников');
+                return;
+            }
+            
+            // Send to all connected peers
+            for (const peerId of peerIds) {
+                await sendFileToUser(file, peerId);
+            }
+        }
+    }
+    
+    async function sendFileToUser(file, targetUserId) {
+        const dataChannel = state.dataChannels[targetUserId];
+        if (!dataChannel || dataChannel.readyState !== 'open') {
+            showToast('Соединение не установлено');
+            return;
+        }
+        
+        const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const transferId = fileId;
+        
+        state.activeTransfers[transferId] = {
+            id: transferId,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            receivedChunks: 0,
+            totalChunks: Math.ceil(file.size / state.chunkSize),
+            chunks: [],
+            targetId: targetUserId
+        };
+        
+        // Read file and send chunks
+        const reader = new FileReader();
+        let offset = 0;
+        
+        const sendNextChunk = () => {
+            const chunk = file.slice(offset, offset + state.chunkSize);
+            reader.readAsArrayBuffer(chunk);
+        };
+        
+        reader.onload = (e) => {
+            const chunkData = Array.from(new Uint8Array(e.target.result));
+            
+            dataChannel.send(JSON.stringify({
+                type: 'file_chunk',
+                fileId: fileId,
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                chunkIndex: Math.floor(offset / state.chunkSize),
+                totalChunks: state.activeTransfers[transferId].totalChunks,
+                data: chunkData
+            }));
+            
+            offset += state.chunkSize;
+            
+            const progress = (offset / file.size) * 100;
+            updateFileProgress(fileId, progress);
+            
+            if (offset < file.size) {
+                sendNextChunk();
+            } else {
+                // Transfer complete
+                delete state.activeTransfers[transferId];
+                showToast(`Файл "${file.name}" отправлен`);
+                
+                saveTransfer({
+                    type: 'sent',
+                    from: state.userId,
+                    to: targetUserId,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    timestamp: Date.now()
+                });
+            }
+        };
+        
+        sendNextChunk();
+    }
+    
+    function updateFileProgress(fileId, progress) {
+        // Can be extended to show progress in UI
+        console.log(`File ${fileId} progress: ${progress}%`);
+    }
+    
+    function connectToNewParticipants(oldList, newList) {
+        const newParticipants = newList.filter(id => 
+            id !== state.userId && 
+            !oldList.includes(id) && 
+            !state.peerConnections[id]
+        );
+        
+        newParticipants.forEach(peerId => {
+            console.log('Connecting to:', peerId);
+            createPeerConnection(peerId);
+        });
+        
+        Object.keys(state.peerConnections).forEach(peerId => {
+            if (!newList.includes(peerId) && peerId !== state.userId) {
+                cleanupPeerConnection(peerId);
+            }
+        });
+    }
+    
+    async function createPeerConnection(peerId) {
+        if (state.peerConnections[peerId]) return;
+        
+        console.log(`Creating connection to ${peerId}`);
+        
+        try {
+            const pc = new RTCPeerConnection(config);
+            state.peerConnections[peerId] = pc;
+            
+            // Create data channel for file transfer
+            const dataChannel = pc.createDataChannel('fileTransfer');
+            setupDataChannel(dataChannel, peerId);
+            state.dataChannels[peerId] = dataChannel;
+            
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    sendSignal(peerId, 'candidate', e.candidate);
+                }
+            };
+            
+            pc.ondatachannel = (e) => {
+                console.log(`Data channel received from ${peerId}`);
+                setupDataChannel(e.channel, peerId);
+                state.dataChannels[peerId] = e.channel;
+            };
+            
+            if (state.userId < peerId) {
+                setTimeout(async () => {
+                    try {
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        await sendSignal(peerId, 'offer', offer);
+                        console.log(`Offer sent to ${peerId}`);
+                    } catch (error) {
+                        console.error(`Offer error:`, error);
+                    }
+                }, 500);
+            }
+            
+        } catch (error) {
+            console.error(`Connection error:`, error);
+        }
+    }
+    
+    function setupDataChannel(channel, peerId) {
+        channel.onopen = () => {
+            console.log(`Data channel open with ${peerId}`);
+        };
+        
+        channel.onclose = () => {
+            console.log(`Data channel closed with ${peerId}`);
+        };
+        
+        channel.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'file_chunk') {
+                await handleFileChunk(data, peerId);
+            }
+        };
+    }
+    
+    async function handleFileChunk(data, fromPeerId) {
+        const transferId = data.fileId;
+        
+        if (!state.activeTransfers[transferId]) {
+            state.activeTransfers[transferId] = {
+                id: transferId,
+                fileName: data.fileName,
+                fileSize: data.fileSize,
+                fileType: data.fileType,
+                receivedChunks: 0,
+                totalChunks: data.totalChunks,
+                chunks: new Array(data.totalChunks),
+                fromPeerId: fromPeerId
+            };
+        }
+        
+        const transfer = state.activeTransfers[transferId];
+        transfer.chunks[data.chunkIndex] = new Uint8Array(data.data);
+        transfer.receivedChunks++;
+        
+        const progress = (transfer.receivedChunks / transfer.totalChunks) * 100;
+        updateFileProgress(transferId, progress);
+        
+        if (transfer.receivedChunks === transfer.totalChunks) {
+            // All chunks received, assemble file
+            let totalSize = 0;
+            for (const chunk of transfer.chunks) {
+                totalSize += chunk.length;
+            }
+            
+            const fullData = new Uint8Array(totalSize);
+            let offset = 0;
+            for (const chunk of transfer.chunks) {
+                fullData.set(chunk, offset);
+                offset += chunk.length;
+            }
+            
+            const fileData = {
+                id: transferId,
+                name: transfer.fileName,
+                size: transfer.fileSize,
+                type: transfer.fileType,
+                data: Array.from(fullData),
+                savedAt: Date.now()
+            };
+            
+            await saveFile(fileData);
+            
+            // Get sender name
+            const sender = state.participants.find(p => p.id === fromPeerId);
+            
+            await saveTransfer({
+                type: 'received',
+                from: fromPeerId,
+                senderName: sender?.name || fromPeerId,
+                fileName: transfer.fileName,
+                fileSize: transfer.fileSize,
+                timestamp: Date.now()
+            });
+            
+            delete state.activeTransfers[transferId];
+            showToast(`Файл "${transfer.fileName}" получен и сохранен`);
+        }
+    }
+    
+    function cleanupPeerConnection(peerId) {
+        if (state.peerConnections[peerId]) {
+            state.peerConnections[peerId].close();
+            delete state.peerConnections[peerId];
+        }
+        if (state.dataChannels[peerId]) {
+            delete state.dataChannels[peerId];
+        }
+    }
+    
+    async function pollSignals() {
+        if (!state.roomId) return;
+        
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getSignals',
+                    roomId: state.roomId,
+                    userId: state.userId,
+                    timestamp: state.lastPollTime
+                })
+            });
+    
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.signals?.length > 0) {
+                    console.log(`Received ${data.signals.length} signals`);
+                    state.lastPollTime = Date.now();
+                    
+                    for (const signal of data.signals) {
+                        await handleSignal(signal);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Poll error:', error);
+        }
+    }
+    
+    async function handleSignal(signal) {
+        const signalId = `${signal.from}_${signal.type}_${Date.now()}`;
+        if (state.processedSignals.has(signalId)) return;
+        state.processedSignals.add(signalId);
+        
+        if (signal.from === state.userId) return;
+        
+        console.log(`${signal.type} from ${signal.from}`);
+        
+        try {
+            switch (signal.type) {
+                case 'offer':
+                    await handleOffer(signal.from, signal.data);
+                    break;
+                case 'answer':
+                    await handleAnswer(signal.from, signal.data);
+                    break;
+                case 'candidate':
+                    await handleCandidate(signal.from, signal.data);
+                    break;
+            }
+        } catch (error) {
+            console.error(`Signal error:`, error);
+        }
+    }
+    
+    async function sendSignal(to, type, data) {
+        if (!state.roomId) return;
+        
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'signal',
+                    roomId: state.roomId,
+                    userId: state.userId,
+                    signal: { to, type, data }
+                })
+            });
+        } catch (error) {
+            console.error('Send error:', error);
+        }
+    }
+    
+    async function handleOffer(peerId, offer) {
+        let pc = state.peerConnections[peerId];
+        
+        if (!pc) {
+            pc = new RTCPeerConnection(config);
+            state.peerConnections[peerId] = pc;
+            
+            const dataChannel = pc.createDataChannel('fileTransfer');
+            setupDataChannel(dataChannel, peerId);
+            state.dataChannels[peerId] = dataChannel;
+            
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    sendSignal(peerId, 'candidate', e.candidate);
+                }
+            };
+            
+            pc.ondatachannel = (e) => {
+                setupDataChannel(e.channel, peerId);
+                state.dataChannels[peerId] = e.channel;
+            };
+        }
+        
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            
+            await sendSignal(peerId, 'answer', answer);
+            
+            if (state.pendingCandidates[peerId]) {
+                for (const candidate of state.pendingCandidates[peerId]) {
+                    try {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    } catch (e) {}
+                }
+                delete state.pendingCandidates[peerId];
+            }
+            
+        } catch (error) {
+            console.error(`Offer error:`, error);
+        }
+    }
+    
+    async function handleAnswer(peerId, answer) {
+        const pc = state.peerConnections[peerId];
+        if (!pc) return;
+        
+        try {
+            if (pc.signalingState === 'have-local-offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            }
+        } catch (error) {
+            console.error(`Answer error:`, error);
+        }
+    }
+    
+    async function handleCandidate(peerId, candidate) {
+        const pc = state.peerConnections[peerId];
+        
+        if (!pc || pc.remoteDescription === null) {
+            if (!state.pendingCandidates[peerId]) {
+                state.pendingCandidates[peerId] = [];
+            }
+            state.pendingCandidates[peerId].push(candidate);
+            return;
+        }
+        
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (error) {
+            console.warn(`Candidate error:`, error.message);
+        }
+    }
+    
+    async function kickParticipant(participantId) {
+        if (!confirm('Удалить участника?')) return;
+        
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'kickParticipant',
+                    roomId: state.roomId,
+                    userId: state.userId,
+                    participantId
+                })
+            });
+            showToast('Участник удален');
+            cleanupPeerConnection(participantId);
+        } catch (error) {
+            showToast('Ошибка удаления');
+        }
+    }
+    
+    async function leaveRoom() {
+        if (!confirm('Выйти из комнаты?')) return;
+        
+        if (state.roomId) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'leaveRoom', 
+                        roomId: state.roomId, 
+                        userId: state.userId 
+                    })
+                });
+            } catch (error) {}
+        }
+        
+        cleanup();
+        showScreen('homeScreen');
+        document.getElementById('roomCode').value = '';
+        showToast('Вы вышли из комнаты');
+    }
+    
+    function cleanup() {
+        if (state.updateInterval) clearInterval(state.updateInterval);
+        if (state.signalInterval) clearInterval(state.signalInterval);
+        
+        Object.values(state.peerConnections).forEach(pc => pc.close());
+        state.peerConnections = {};
+        state.dataChannels = {};
+        state.activeTransfers = {};
+        
+        state.roomId = null;
+        state.roomOwner = false;
+        state.pendingCandidates = {};
+        state.processedSignals.clear();
+    }
+    
+    function getInitials(name) {
+        const words = name.split(' ');
+        return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.substring(0, 2);
+    }
+    
+    function getColor(id) {
+        const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#00d2ff', '#3a7bd5', '#5eead4', '#10b981'];
+        let hash = 0;
+        for (let i = 0; i < id.length; i++) {
+            hash = id.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash) % colors.length];
+    }
+    
+    function showLoading(text = 'Загрузка...') {
+        document.getElementById('loading').style.display = 'flex';
+        document.getElementById('loadingText').textContent = text;
+    }
+    
+    function hideLoading() {
+        document.getElementById('loading').style.display = 'none';
+    }
+    
+    document.getElementById('roomCode')?.addEventListener('input', function() {
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
+    });
+</script>
+</body>
+</html>
